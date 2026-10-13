@@ -1,0 +1,101 @@
+// Placeholder risk scoring so the dashboard has something real to show. The
+// backend risk engine will replace this; the dashboard only needs each item's
+// { score, status } and the list of recommendations.
+
+import { ZONES, SAFE_LIMIT_F } from '../config.js'
+import { degreeMinutes, timeAbove, longestRunAbove, zoneTemp, warmest, mean, formatDuration } from './metrics.js'
+
+export const PROFILES = {
+  poultry: { label: 'Raw poultry', limitF: 40, sensitivity: 1.6 },
+  dairy: { label: 'Dairy', limitF: 40, sensitivity: 1.0 },
+  greens: { label: 'Leafy greens', limitF: 41, sensitivity: 0.6 },
+}
+
+export const INVENTORY = [
+  { id: 'chicken', name: 'Chicken thighs', profile: 'poultry', zone: 'bottom' },
+  { id: 'turkey', name: 'Ground turkey', profile: 'poultry', zone: 'mid' },
+  { id: 'milk', name: 'Milk', profile: 'dairy', zone: 'top' },
+  { id: 'yogurt', name: 'Yogurt', profile: 'dairy', zone: 'mid' },
+  { id: 'spinach', name: 'Spinach', profile: 'greens', zone: 'bottom' },
+  { id: 'romaine', name: 'Romaine', profile: 'greens', zone: 'mid' },
+]
+
+export const ITEM_STATUS = {
+  good: { level: 'good', label: 'Good' },
+  soon: { level: 'warning', label: 'Use soon' },
+  risk: { level: 'critical', label: 'At risk' },
+}
+
+const zoneLabel = (id) => ZONES.find((z) => z.id === id)?.label ?? id
+
+export function scoreInventory(samples) {
+  return INVENTORY.map((item) => {
+    const profile = PROFILES[item.profile]
+    const pick = zoneTemp(item.zone)
+    const exposure = degreeMinutes(samples, pick, profile.limitF)
+    const score = Math.round(Math.max(0, 100 - (profile.sensitivity * exposure) / 6))
+    const status = score >= 80 ? 'good' : score >= 50 ? 'soon' : 'risk'
+    return {
+      ...item,
+      profileLabel: profile.label,
+      zoneLabel: zoneLabel(item.zone),
+      limitF: profile.limitF,
+      timeAboveMs: timeAbove(samples, pick, profile.limitF),
+      score,
+      status,
+    }
+  }).sort((a, b) => a.score - b.score)
+}
+
+export function recommend(samples, items, doors) {
+  const recs = []
+  const openNow = doors.find((d) => d.ongoing)
+  if (openNow && openNow.end - openNow.start > 30e3) {
+    recs.push({
+      level: 'critical',
+      title: 'Close the door',
+      reason: `Open for ${formatDuration(openNow.end - openNow.start)} and warming.`,
+    })
+  }
+
+  for (const item of items.filter((i) => i.status === 'risk').slice(0, 2)) {
+    recs.push({
+      level: 'critical',
+      title: `Check the ${item.name.toLowerCase()} before using`,
+      reason: `${formatDuration(item.timeAboveMs)} above ${item.limitF}°F in the ${item.zoneLabel.toLowerCase()} zone.`,
+    })
+  }
+
+  const avgByZone = Object.fromEntries(
+    ZONES.map((z) => [z.id, mean(samples.map(zoneTemp(z.id)).filter(Number.isFinite))]),
+  )
+  const coldest = ZONES.reduce((a, b) => (avgByZone[a.id] <= avgByZone[b.id] ? a : b))
+  const movable = items.find((i) => i.status !== 'good' && i.zone !== coldest.id)
+  if (movable) {
+    const diff = avgByZone[movable.zone] - avgByZone[coldest.id]
+    recs.push({
+      level: 'warning',
+      title: `Move the ${movable.name.toLowerCase()} to the ${coldest.label.toLowerCase()} zone`,
+      reason: `It averaged ${diff.toFixed(1)}°F cooler than the ${movable.zoneLabel.toLowerCase()} zone.`,
+    })
+  }
+
+  const longest = longestRunAbove(samples, warmest, SAFE_LIMIT_F)
+  if (longest > 15 * 60e3) {
+    recs.push({
+      level: 'warning',
+      title: 'Check the door seal',
+      reason: `One stretch above ${SAFE_LIMIT_F}°F lasted ${formatDuration(longest)}.`,
+    })
+  }
+
+  if (doors.length > 30) {
+    recs.push({
+      level: 'warning',
+      title: 'Open the door less often',
+      reason: `${doors.length} openings, each letting warm air in.`,
+    })
+  }
+
+  return recs.slice(0, 4)
+}

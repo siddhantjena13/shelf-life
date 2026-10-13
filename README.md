@@ -66,8 +66,9 @@ uvicorn main:app --reload
 ```bash
 cd frontend
 npm install
-npm start
+npm run dev
 ```
+The dashboard opens at http://localhost:5173 and runs on simulated readings until it is pointed at the backend in `frontend/src/data/source.js`.
 
 **Hardware**
 1. Wire the temperature/humidity sensor and door sensor to the Raspberry Pi (or ESP32).
