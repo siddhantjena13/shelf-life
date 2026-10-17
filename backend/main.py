@@ -40,8 +40,7 @@ async def lifespan(app: FastAPI):
     await app.state.store.close()
 
 
-app = FastAPI(title="ShelfSense API", lifespan=lifespan)
-app = FastAPI(title="ShelfLife API")
+app = FastAPI(title="ShelfLife API", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
