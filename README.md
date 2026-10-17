@@ -1,4 +1,4 @@
-# ShelfSense
+# ShelfLife
 
 > Built at **DubHacks 2026**
 
