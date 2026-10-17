@@ -4,3 +4,7 @@ __pycache__/
 .pytest_cache/
 .venv/
 .DS_Store
+
+# Live sensor data and device credentials
+backend/*.db
+firmware/**/secrets.h
