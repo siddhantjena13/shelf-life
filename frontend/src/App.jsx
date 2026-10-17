@@ -14,6 +14,7 @@ import {
   tempLevel,
 } from './lib/metrics.js'
 import { INVENTORY, PROFILES, scoreInventory, recommend } from './lib/risk.js'
+import { readSavedValue } from './lib/storage.js'
 import Sidebar from './components/Sidebar.jsx'
 import StorageConditions from './components/StorageConditions.jsx'
 import InventoryRisk from './components/InventoryRisk.jsx'
@@ -23,8 +24,8 @@ import AtAGlance from './components/AtAGlance.jsx'
 import SensorsPage from './components/SensorsPage.jsx'
 import AlertsPage from './components/AlertsPage.jsx'
 
-const THEME_KEY = 'shelfsense-theme'
-const INVENTORY_KEY = 'shelfsense-inventory'
+const THEME_KEY = 'shelflife-theme'
+const INVENTORY_KEY = 'shelflife-inventory'
 const RISK_REFRESH_MS = 15_000
 
 function freshStarterInventory() {
@@ -35,7 +36,7 @@ function freshStarterInventory() {
 function useInventory() {
   const [inventory, setInventory] = useState(() => {
     try {
-      const saved = localStorage.getItem(INVENTORY_KEY)
+      const saved = readSavedValue(INVENTORY_KEY, 'shelfsense-inventory')
       if (!saved) return freshStarterInventory()
       const parsed = JSON.parse(saved)
       if (!Array.isArray(parsed)) return freshStarterInventory()
@@ -103,7 +104,7 @@ function useRiskAssessment(rawReadings, inventory) {
 function useTheme() {
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'
+      return readSavedValue(THEME_KEY, 'shelfsense-theme') === 'dark' ? 'dark' : 'light'
     } catch {
       return 'light'
     }

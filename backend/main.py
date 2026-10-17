@@ -1,4 +1,4 @@
-"""HTTP endpoints for the ShelfSense dashboard."""
+"""HTTP endpoints for the ShelfLife dashboard."""
 
 import json
 import os
@@ -20,7 +20,7 @@ ALLOWED_TYPES = {"image/jpeg", "image/png", "image/webp", "image/gif"}
 ALLOWED_PROFILES = set(PROFILES)
 ALLOWED_ZONES = {"top", "mid", "bottom"}
 
-app = FastAPI(title="ShelfSense API")
+app = FastAPI(title="ShelfLife API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
