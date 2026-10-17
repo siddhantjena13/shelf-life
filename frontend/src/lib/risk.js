@@ -13,15 +13,6 @@ export const PROFILES = {
   other: { label: 'Other refrigerated food', limitF: 40, sensitivity: 1.0 },
 }
 
-export const INVENTORY = [
-  { id: 'chicken', name: 'Chicken thighs', profile: 'poultry', zone: 'bottom' },
-  { id: 'turkey', name: 'Ground turkey', profile: 'poultry', zone: 'mid' },
-  { id: 'milk', name: 'Milk', profile: 'dairy', zone: 'top' },
-  { id: 'yogurt', name: 'Yogurt', profile: 'dairy', zone: 'mid' },
-  { id: 'spinach', name: 'Spinach', profile: 'greens', zone: 'bottom' },
-  { id: 'romaine', name: 'Romaine', profile: 'greens', zone: 'mid' },
-]
-
 export const ITEM_STATUS = {
   good: { level: 'good', label: 'Good' },
   soon: { level: 'warning', label: 'Use soon' },
@@ -34,7 +25,7 @@ export const ITEM_STATUS = {
 
 const zoneLabel = (id) => ZONES.find((z) => z.id === id)?.label ?? id
 
-export function scoreInventory(samples, inventory = INVENTORY) {
+export function scoreInventory(samples, inventory) {
   return inventory.map((item) => {
     const profile = PROFILES[item.profile]
     const itemSamples = Number.isFinite(item.addedAtMs)
@@ -54,6 +45,23 @@ export function scoreInventory(samples, inventory = INVENTORY) {
       status,
     }
   }).sort((a, b) => a.score - b.score)
+}
+
+// Overlays the backend's cumulative-exposure results on the preview scores.
+// Items the backend has not assessed yet keep their preview estimate.
+export function mergeRisk(samples, inventory, assessment) {
+  const assessedById = new Map((assessment?.items || []).map((item) => [item.id, item]))
+  return scoreInventory(samples, inventory).map((item) => {
+    const result = assessedById.get(item.id)
+    return result ? {
+      ...item,
+      ...result,
+      profileLabel: PROFILES[item.profile]?.label ?? result.profileLabel,
+      limitF: 40,
+      timeAboveMs: result.dangerZoneHours * 3600e3,
+      scoringMode: 'backend',
+    } : { ...item, scoringMode: 'preview' }
+  })
 }
 
 export function recommend(samples, items, doors) {
