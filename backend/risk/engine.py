@@ -116,7 +116,12 @@ def assess(item: Item, readings: list[Reading], now: float) -> Assessment:
 
     clock_h = 0.0
     danger_h = 0.0
-    gap_h = 0.0
+    # If the item predates the available sensor history, report the unknown
+    # interval instead of implying we observed its entire storage period.
+    gap_h = max(
+        ((readings[0].t if readings else now) - item.added_at) / 3600,
+        0.0,
+    )
     condensation_min = 0.0
     loss_by_cause: dict[str, float] = {}
     excursions: list[Excursion] = []

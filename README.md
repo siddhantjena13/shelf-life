@@ -47,7 +47,7 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 
 - [ ] Working hardware sensors
 - [ ] Live dashboard visualization
-- [ ] 3 tailored food profiles
+- [ ] Food-specific risk profiles, including broad estimated fallbacks
 - [ ] Historical exposure tracking
 - [ ] Live cooler demonstration
 
@@ -60,8 +60,10 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 The FastAPI server isn't built yet. For now the backend is the `risk` package, which has no dependencies outside the standard library. To run its tests:
 ```bash
 cd backend
-pip install pytest
-pytest
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn main:app --reload
 ```
 See `backend/risk/HOW_IT_WORKS.md` for how the risk model scores each item.
 
@@ -71,7 +73,11 @@ cd frontend
 npm install
 npm run dev
 ```
-The dashboard opens at http://localhost:5173 and runs on simulated readings until it is pointed at the backend in `frontend/src/data/source.js`.
+The dashboard opens at http://localhost:5173 and runs on simulated readings. Start the backend as well to use the cumulative-exposure risk engine. Inventory is saved in the browser, and each item is scored only against readings from its recorded `addedAtMs` time onward. The sensor simulator provides one day of history, so an item stored earlier than the available sensor history is marked with an unknown-data gap by the backend model.
+
+Set `PERCEPTRON_API_KEY` in the backend shell to enable photo-assisted inventory scanning. The key stays on the backend; without it, manual inventory entry and risk scoring still work, and the scan endpoint explains that scanning is not configured. The scan endpoint defaults to `perceptron-mk1`; set `PERCEPTRON_MODEL` to override it if your Perceptron account uses a different model ID.
+
+The `Whole produce` and `Other refrigerated food` risk profiles are broad estimates. Select a more specific profile when one fits, and treat these scores as storage decision support rather than proof of food safety.
 
 **Hardware**
 1. Wire the temperature/humidity sensor and door sensor to the Raspberry Pi (or ESP32).

@@ -13,6 +13,8 @@ Every item starts with a normal shelf life from the USDA's FoodKeeper data, whic
 
 We use the middle of each range.
 
+The dashboard records when each item was added to the fridge. The engine ignores sensor readings from before that time. If the item predates the available sensor history, it reports the unobserved period as a data gap instead of treating it as measured exposure.
+
 Think of each item as having a clock. At 40°F it runs at normal speed, so an hour in the fridge uses an hour of shelf life. Colder, the clock slows down. Warmer, it speeds up. The score on the dashboard is how much of the normal shelf life is left, out of 100. However cold the fridge is, we never promise more than the top of the USDA range.
 
 ## How much faster when it's warm
@@ -22,6 +24,7 @@ The speed-up comes from the Ratkowsky model, a standard formula in food microbio
 - Chicken and milk spoil because of bacteria called pseudomonads, which can grow down to about -7.75°C (18°F).
 - For leafy greens we track Listeria, which grows down to about -1.5°C (29°F).
 - Strawberries go bad from gray mold, which grows down to about -2°C (28°F).
+- Whole produce and other refrigerated food use broad fallback profiles marked as estimates because one value cannot represent every food in those groups.
 
 For example, chicken at 50°F spoils about twice as fast as it does at 40°F, so an hour at 50°F costs roughly two hours of shelf life.
 

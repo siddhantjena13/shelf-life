@@ -1,6 +1,5 @@
-// Placeholder risk scoring so the dashboard has something real to show. The
-// backend risk engine will replace this; the dashboard only needs each item's
-// { score, status } and the list of recommendations.
+// Lightweight preview scoring used only while the backend risk engine is
+// unavailable. Normal dashboard assessments come from backend/risk/engine.py.
 
 import { ZONES, SAFE_LIMIT_F } from '../config.js'
 import { degreeMinutes, timeAbove, longestRunAbove, zoneTemp, warmest, mean, formatDuration } from './metrics.js'
@@ -9,6 +8,9 @@ export const PROFILES = {
   poultry: { label: 'Raw poultry', limitF: 40, sensitivity: 1.6 },
   dairy: { label: 'Dairy', limitF: 40, sensitivity: 1.0 },
   greens: { label: 'Leafy greens', limitF: 41, sensitivity: 0.6 },
+  berries: { label: 'Berries', limitF: 40, sensitivity: 0.8 },
+  produce: { label: 'Whole produce', limitF: 40, sensitivity: 0.8 },
+  other: { label: 'Other refrigerated food', limitF: 40, sensitivity: 1.0 },
 }
 
 export const INVENTORY = [
@@ -24,15 +26,22 @@ export const ITEM_STATUS = {
   good: { level: 'good', label: 'Good' },
   soon: { level: 'warning', label: 'Use soon' },
   risk: { level: 'critical', label: 'At risk' },
+  use_soon: { level: 'warning', label: 'Use soon' },
+  at_risk: { level: 'critical', label: 'At risk' },
+  expired: { level: 'critical', label: 'Expired' },
+  discard: { level: 'critical', label: 'Discard' },
 }
 
 const zoneLabel = (id) => ZONES.find((z) => z.id === id)?.label ?? id
 
-export function scoreInventory(samples) {
-  return INVENTORY.map((item) => {
+export function scoreInventory(samples, inventory = INVENTORY) {
+  return inventory.map((item) => {
     const profile = PROFILES[item.profile]
+    const itemSamples = Number.isFinite(item.addedAtMs)
+      ? samples.filter((sample) => sample.t >= item.addedAtMs)
+      : samples
     const pick = zoneTemp(item.zone)
-    const exposure = degreeMinutes(samples, pick, profile.limitF)
+    const exposure = degreeMinutes(itemSamples, pick, profile.limitF)
     const score = Math.round(Math.max(0, 100 - (profile.sensitivity * exposure) / 6))
     const status = score >= 80 ? 'good' : score >= 50 ? 'soon' : 'risk'
     return {
@@ -40,7 +49,7 @@ export function scoreInventory(samples) {
       profileLabel: profile.label,
       zoneLabel: zoneLabel(item.zone),
       limitF: profile.limitF,
-      timeAboveMs: timeAbove(samples, pick, profile.limitF),
+      timeAboveMs: timeAbove(itemSamples, pick, profile.limitF),
       score,
       status,
     }
@@ -58,11 +67,16 @@ export function recommend(samples, items, doors) {
     })
   }
 
-  for (const item of items.filter((i) => i.status === 'risk').slice(0, 2)) {
+  for (const item of items.filter((i) => ['risk', 'at_risk', 'expired', 'discard'].includes(i.status)).slice(0, 2)) {
     recs.push({
       level: 'critical',
-      title: `Check the ${item.name.toLowerCase()} before using`,
-      reason: `${formatDuration(item.timeAboveMs)} above ${item.limitF}°F in the ${item.zoneLabel.toLowerCase()} zone.`,
+      title: item.status === 'discard' ? `Discard the ${item.name.toLowerCase()}` :
+        item.status === 'expired' ? `Check the ${item.name.toLowerCase()} before using` :
+          item.status === 'at_risk' ? `Use the ${item.name.toLowerCase()} today` :
+            `Check the ${item.name.toLowerCase()} before using`,
+      reason: item.remainingHours != null
+        ? `Estimated remaining shelf life: ${formatDuration(item.remainingHours * 3600e3)}.`
+        : `${formatDuration(item.timeAboveMs)} above ${item.limitF}°F in the ${item.zoneLabel.toLowerCase()} zone.`,
     })
   }
 
