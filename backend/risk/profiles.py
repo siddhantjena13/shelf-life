@@ -120,4 +120,30 @@ PROFILES: dict[str, Profile] = {
             condensation_multiplier=2.0,  # free water is what mold spores need
         ),
     ),
+    # OUR ESTIMATE: a broad profile for intact, non-leafy produce such as
+    # onions, carrots, cucumbers, tomatoes, and cauliflower. Storage life
+    # varies substantially by crop and preparation; users should prefer a
+    # specific profile when one is available.
+    'produce': Profile(
+        id='produce',
+        label='Whole produce',
+        organism='Mixed postharvest spoilage organisms',
+        t_min_c=-2.0,
+        shelf_life_days=(5, 14),
+        two_hour_rule=False,
+        thermal_lag_min=30,
+        humidity=None,
+    ),
+    # OUR ESTIMATE: catch-all for refrigerated foods without a dedicated
+    # profile. This should not replace the package's date or handling advice.
+    'other': Profile(
+        id='other',
+        label='Other refrigerated food',
+        organism='Mixed spoilage organisms',
+        t_min_c=-7.75,
+        shelf_life_days=(3, 7),
+        two_hour_rule=True,
+        thermal_lag_min=40,
+        humidity=None,
+    ),
 }
