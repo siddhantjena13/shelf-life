@@ -9,6 +9,7 @@ import httpx
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from readings import router as readings_router
 from risk import Item, Reading, assess, recommend
 from risk.profiles import PROFILES
 
@@ -27,6 +28,7 @@ app.add_middleware(
     allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
+app.include_router(readings_router)  # live ESP32 readings: see readings.py
 
 
 class ReadingInput(BaseModel):
