@@ -1,4 +1,4 @@
-"""HTTP endpoints for the ShelfSense dashboard."""
+"""HTTP endpoints for the ShelfLife dashboard."""
 
 import logging
 import sqlite3
@@ -15,6 +15,7 @@ from pymongo.errors import PyMongoError
 
 import vision
 from inventory import router as inventory_router
+from readings import router as readings_router
 from risk import Item, Reading, assess, recommend
 from risk.profiles import PROFILES
 from store import create_store
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ShelfSense API", lifespan=lifespan)
+app = FastAPI(title="ShelfLife API")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
@@ -63,6 +65,7 @@ async def database_unavailable(request: Request, exc: PyMongoError):
 async def database_failed(request: Request, exc: sqlite3.Error):
     log.error("SQLite error on %s %s: %s", request.method, request.url.path, exc)
     return JSONResponse(status_code=503, content={"detail": "The inventory database could not complete that request."})
+app.include_router(readings_router)  # live ESP32 readings: see readings.py
 
 
 class ReadingInput(BaseModel):

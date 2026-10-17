@@ -17,6 +17,9 @@ import {
 import { mergeRisk, recommend } from './lib/risk.js'
 import { SAMPLE_ITEMS, inventoryRecommendations, samplePayload } from './lib/food.js'
 import Sidebar, { MobileNav } from './components/Sidebar.jsx'
+import { INVENTORY, PROFILES, scoreInventory, recommend } from './lib/risk.js'
+import { readSavedValue } from './lib/storage.js'
+import Sidebar from './components/Sidebar.jsx'
 import StorageConditions from './components/StorageConditions.jsx'
 import InventoryRisk from './components/InventoryRisk.jsx'
 import ExposureHistory from './components/ExposureHistory.jsx'
@@ -32,6 +35,45 @@ import AlertsPage from './components/AlertsPage.jsx'
 
 const THEME_KEY = 'shelfsense-theme'
 const RISK_REFRESH_MS = 15_000
+
+const THEME_KEY = 'shelflife-theme'
+const INVENTORY_KEY = 'shelflife-inventory'
+const RISK_REFRESH_MS = 15_000
+
+function freshStarterInventory() {
+  const addedAtMs = Date.now()
+  return INVENTORY.map((item) => ({ ...item, addedAtMs }))
+}
+
+function useInventory() {
+  const [inventory, setInventory] = useState(() => {
+    try {
+      const saved = readSavedValue(INVENTORY_KEY, 'shelfsense-inventory')
+      if (!saved) return freshStarterInventory()
+      const parsed = JSON.parse(saved)
+      if (!Array.isArray(parsed)) return freshStarterInventory()
+      return parsed.filter((item) => item && typeof item.name === 'string' && item.name.trim()).map((item) => ({
+        ...item,
+        profile: PROFILES[item.profile] ? item.profile : 'other',
+        zone: ZONES.some((zone) => zone.id === item.zone) ? item.zone : 'mid',
+        addedAtMs: Number.isFinite(item.addedAtMs) ? item.addedAtMs : Date.now(),
+        packaged: Boolean(item.packaged),
+      }))
+    } catch {
+      return freshStarterInventory()
+    }
+  })
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(INVENTORY_KEY, JSON.stringify(inventory))
+    } catch {
+      // Inventory remains usable for this session if storage is unavailable.
+    }
+  }, [inventory])
+
+  return [inventory, setInventory]
+}
 
 function useRiskAssessment(rawReadings, inventory) {
   const [assessment, setAssessment] = useState(null)
@@ -78,7 +120,7 @@ function useRiskAssessment(rawReadings, inventory) {
 function useTheme() {
   const [theme, setTheme] = useState(() => {
     try {
-      return localStorage.getItem(THEME_KEY) === 'dark' ? 'dark' : 'light'
+      return readSavedValue(THEME_KEY, 'shelfsense-theme') === 'dark' ? 'dark' : 'light'
     } catch {
       return 'light'
     }

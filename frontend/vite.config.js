@@ -9,6 +9,9 @@ import basicSsl from '@vitejs/plugin-basic-ssl'
 export default defineConfig(({ mode }) => ({
   plugins: [react(), ...(mode === 'phone' ? [basicSsl()] : [])],
   server: {
+    // Listen on the local network too, so an iPad on the same Wi-Fi/hotspot
+    // can open http://<laptop-ip>:5173
+    host: true,
     proxy: {
       '/api': 'http://127.0.0.1:8000',
     },

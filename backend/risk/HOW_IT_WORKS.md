@@ -1,6 +1,6 @@
 # How the risk model works
 
-A thermometer tells you the temperature right now. ShelfSense keeps a running total instead, and uses it to answer one question for each item: how much of its shelf life is left, given everything the fridge has been through since the item went in?
+A thermometer tells you the temperature right now. ShelfLife keeps a running total instead, and uses it to answer one question for each item: how much of its shelf life is left, given everything the fridge has been through since the item went in?
 
 ## The shelf-life clock
 
@@ -62,7 +62,7 @@ The half and fifth cut-offs are our choice.
 
 ## What it can't do
 
-The sensors measure the air, not the food, and nothing here detects bacteria. ShelfSense estimates risk from storage conditions. It can't tell you for certain that food is safe, so when in doubt, follow USDA guidance.
+The sensors measure the air, not the food, and nothing here detects bacteria. ShelfLife estimates risk from storage conditions. It can't tell you for certain that food is safe, so when in doubt, follow USDA guidance.
 
 If a sensor goes quiet, the model assumes conditions stayed the same as the last reading and reports how long the gap was.
 

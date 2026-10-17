@@ -16,7 +16,7 @@ export default function Sidebar({ page, onNavigate, inventoryCount, onLog }) {
         <span className="brand-mark">
           <Thermometer size={16} />
         </span>
-        ShelfSense
+        ShelfLife
       </div>
       <nav>
         {NAV.map(({ label, Icon, page: target }) => {
