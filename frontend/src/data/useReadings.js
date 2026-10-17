@@ -28,6 +28,7 @@ function createFolder() {
 
 export function useReadings() {
   const [samples, setSamples] = useState([])
+  const [rawReadings, setRawReadings] = useState([])
   const [source, setSource] = useState(null)
 
   useEffect(() => {
@@ -39,9 +40,11 @@ export function useReadings() {
     setSource(src)
     src.loadHistory().then((history) => {
       if (cancelled) return
+      setRawReadings(history)
       setSamples(fold(history))
       unsubscribe = src.subscribe((readings) => {
         const cutoff = Date.now() - KEEP_MS
+        setRawReadings((prev) => [...prev, ...readings].filter((reading) => Date.parse(reading.timestamp) >= cutoff))
         setSamples((prev) => [...prev, ...fold(readings)].filter((s) => s.t >= cutoff))
       })
     })
@@ -52,7 +55,7 @@ export function useReadings() {
     }
   }, [])
 
-  return { samples, source }
+  return { samples, rawReadings, source }
 }
 
 export function useNow(intervalMs = 1000) {
