@@ -17,6 +17,7 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 - **Hardware Monitoring:** Tracks temperature, humidity, and door-opening frequency.
 - **Risk Engine:** Evaluates accumulated environmental exposure against food-specific guidelines to generate storage-quality scores.
 - **Actionable Dashboard:** Displays live data, historical charts, inventory, and tailored recommendations (e.g., *"Relocate produce"*, *"Check door seal"*).
+- **Photo Inventory:** Snap a photo to log food. Perceptron Mk1.5 suggests what it is, how fresh it looks, and any printed use-by date. Every field stays editable. Re-log an item later with a new photo to track how its freshness changes.
 
 ## How It Works
 
@@ -24,10 +25,11 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 ┌──────────────────────┐      ┌──────────────────────────┐      ┌─────────────────────┐
 │  Sensors             │      │  Backend (FastAPI)       │      │  Dashboard (React)  │
 │  • Temp / humidity   │ ───▶ │  • Ingest readings       │ ───▶ │  • Live readings    │
-│  • Door open/close   │      │  • Store in SQLite       │      │  • History charts   │
-│  Raspberry Pi / ESP32│      │  • Risk engine scoring   │      │  • Inventory        │
+│  • Door open/close   │      │  • Inventory in SQLite   │      │  • History charts   │
+│  Raspberry Pi / ESP32│      │  • Risk engine scoring   │      │  • Photo inventory  │
 └──────────────────────┘      │  • Recommendations       │      │  • Recommendations  │
-                              └──────────────────────────┘      └─────────────────────┘
+                              │  • Perceptron photos     │      └─────────────────────┘
+                              └──────────────────────────┘
 ```
 
 1. Sensors sample the storage environment and log door events.
@@ -41,6 +43,7 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 | -------- | -------------------------------------------------- |
 | Hardware | Raspberry Pi, ESP32 (optional), temperature/humidity sensors, door sensor |
 | Backend  | Python, FastAPI, SQLite                            |
+| Vision   | Perceptron Mk1.5 (food recognition, freshness, printed dates) |
 | Frontend | React                                              |
 
 ## Hackathon MVP
@@ -61,9 +64,16 @@ cd backend
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
+cp .env.example .env   # then add your Perceptron key
 uvicorn main:app --reload
 ```
-See `backend/risk/HOW_IT_WORKS.md` for how the risk model scores each item.
+`backend/.env` (git-ignored) holds the settings:
+
+- `PERCEPTRON_API_KEY` turns on photo recognition. Get a key at [platform.perceptron.inc](https://platform.perceptron.inc). Without it, photos are still saved and you fill in the details yourself. `PERCEPTRON_MODEL` defaults to `perceptron-mk1.5`. `PERCEPTRON_REASONING` defaults to `none`, which answers in about a second. Higher tiers (`low`, `medium`, `high`) are slower and in testing did not read food or dates any better.
+- The inventory is saved in a local SQLite file, `backend/data/shelfsense.db`, created on first run. There is nothing to install or pay for. Delete the file to start over. `SQLITE_PATH` moves it.
+- To share one inventory across machines later, set `MONGODB_URI` to a MongoDB server, such as a free Atlas M0 cluster. The badge at the top of the Inventory page shows which database is in use.
+
+Run the tests with `python -m pytest`. See `backend/risk/HOW_IT_WORKS.md` for how the risk model scores each item.
 
 **Frontend**
 ```bash
@@ -71,11 +81,30 @@ cd frontend
 npm install
 npm run dev
 ```
-The dashboard opens at http://localhost:5173 and runs on simulated readings. Start the backend as well to use the cumulative-exposure risk engine. Inventory is saved in the browser, and each item is scored only against readings from its recorded `addedAtMs` time onward. The sensor simulator provides one day of history, so an item stored earlier than the available sensor history is marked with an unknown-data gap by the backend model.
+The dashboard opens at http://localhost:5173 and runs on simulated readings. The inventory and the cumulative-exposure risk engine need the backend running. Each item is scored only against readings from the time it went into the fridge. The sensor simulator provides one day of history, so an item stored before that is marked with an unknown-data gap.
 
-Set `PERCEPTRON_API_KEY` in the backend shell to enable photo-assisted inventory scanning. The key stays on the backend; without it, manual inventory entry and risk scoring still work, and the scan endpoint explains that scanning is not configured. The scan endpoint defaults to `perceptron-mk1`; set `PERCEPTRON_MODEL` to override it if your Perceptron account uses a different model ID.
+To log food from a phone on the same Wi-Fi, run `npm run dev:phone` and open the `https://<your-computer's-IP>:5173` address it prints. Accept the self-signed certificate warning once. Browsers only allow a live camera preview over HTTPS. On plain HTTP, the Take photo button still opens the phone's own camera.
 
 The `Whole produce` and `Other refrigerated food` risk profiles are broad estimates. Select a more specific profile when one fits, and treat these scores as storage decision support rather than proof of food safety.
+
+### Inventory
+
+- **Log food:** take a photo, or upload one, and Perceptron Mk1.5 suggests the food's name, category, whether it is sealed, how fresh it looks (fresh, good, fair, poor, spoiled) and any printed date it can read. Fields it filled in are marked with a sparkle. Several foods in one photo become separate items you can tick on or off.
+- **Re-log:** take a new photo of an item to record how it looks now. Each check is kept, so the item page shows a before/after comparison, a freshness timeline and the photo history.
+- **Used it / Tossed it:** finished items move to a 30-day history that tracks how much food was eaten rather than wasted. Delete is only for entries logged by mistake.
+- Freshness from photos is kept separate from the sensor-based storage score. The camera sees surfaces, not bacteria or temperature history.
+
+| Endpoint | Purpose |
+| -------- | ------- |
+| `GET /api/inventory` | Active items plus items finished in the last 30 days |
+| `POST /api/inventory` | Log an item (optional photo and first freshness check) |
+| `PATCH /api/inventory/{id}` | Edit an item, or set `state` to `used`, `tossed` or `active` |
+| `DELETE /api/inventory/{id}` | Remove an item and its photos |
+| `POST /api/inventory/{id}/checks` | Re-log: append a freshness check |
+| `POST /api/inventory/scan` | Suggest items from a photo (saves nothing) |
+| `POST /api/inventory/{id}/scan` | Suggest a freshness check for an item from a photo (saves nothing) |
+| `GET /api/photos/{id}` | A stored photo |
+| `GET /api/health` | Which database is active and whether photo recognition is set up |
 
 **Hardware**
 1. Wire the temperature/humidity sensor and door sensor to the Raspberry Pi (or ESP32).

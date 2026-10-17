@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react'
-import { DoorOpen, Moon, Sun } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Camera, DoorOpen, Moon, Sun } from 'lucide-react'
 import { ZONES, RANGES, SAFE_LIMIT_F, OFFLINE_AFTER_MS } from './config.js'
 import { useReadings, useNow } from './data/useReadings.js'
+import { useHealth, useInventory } from './data/useInventory.js'
 import {
   bandDurations,
   bucketize,
@@ -13,54 +14,24 @@ import {
   zoneTemp,
   tempLevel,
 } from './lib/metrics.js'
-import { INVENTORY, PROFILES, scoreInventory, recommend } from './lib/risk.js'
-import Sidebar from './components/Sidebar.jsx'
+import { mergeRisk, recommend } from './lib/risk.js'
+import { SAMPLE_ITEMS, inventoryRecommendations, samplePayload } from './lib/food.js'
+import Sidebar, { MobileNav } from './components/Sidebar.jsx'
 import StorageConditions from './components/StorageConditions.jsx'
 import InventoryRisk from './components/InventoryRisk.jsx'
 import ExposureHistory from './components/ExposureHistory.jsx'
 import Recommendations from './components/Recommendations.jsx'
 import AtAGlance from './components/AtAGlance.jsx'
+import LogFoodFlow from './components/LogFoodFlow.jsx'
+import RelogFlow from './components/RelogFlow.jsx'
+import ItemDetail from './components/ItemDetail.jsx'
+import Toasts, { useToasts } from './components/Toasts.jsx'
+import InventoryPage from './pages/InventoryPage.jsx'
 import SensorsPage from './components/SensorsPage.jsx'
 import AlertsPage from './components/AlertsPage.jsx'
 
 const THEME_KEY = 'shelfsense-theme'
-const INVENTORY_KEY = 'shelfsense-inventory'
 const RISK_REFRESH_MS = 15_000
-
-function freshStarterInventory() {
-  const addedAtMs = Date.now()
-  return INVENTORY.map((item) => ({ ...item, addedAtMs }))
-}
-
-function useInventory() {
-  const [inventory, setInventory] = useState(() => {
-    try {
-      const saved = localStorage.getItem(INVENTORY_KEY)
-      if (!saved) return freshStarterInventory()
-      const parsed = JSON.parse(saved)
-      if (!Array.isArray(parsed)) return freshStarterInventory()
-      return parsed.filter((item) => item && typeof item.name === 'string' && item.name.trim()).map((item) => ({
-        ...item,
-        profile: PROFILES[item.profile] ? item.profile : 'other',
-        zone: ZONES.some((zone) => zone.id === item.zone) ? item.zone : 'mid',
-        addedAtMs: Number.isFinite(item.addedAtMs) ? item.addedAtMs : Date.now(),
-        packaged: Boolean(item.packaged),
-      }))
-    } catch {
-      return freshStarterInventory()
-    }
-  })
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(INVENTORY_KEY, JSON.stringify(inventory))
-    } catch {
-      // Inventory remains usable for this session if storage is unavailable.
-    }
-  }, [inventory])
-
-  return [inventory, setInventory]
-}
 
 function useRiskAssessment(rawReadings, inventory) {
   const [assessment, setAssessment] = useState(null)
@@ -80,8 +51,12 @@ function useRiskAssessment(rawReadings, inventory) {
             now: new Date().toISOString(),
             readings: rawReadings,
             inventory: inventory.map((item) => ({
-              ...item,
-              added_at: new Date(item.addedAtMs ?? Date.now()).toISOString(),
+              id: item.id,
+              name: item.name,
+              profile: item.profile,
+              zone: item.zone,
+              packaged: item.packaged,
+              added_at: item.addedAt,
             })),
           }),
         })
@@ -121,41 +96,69 @@ function useTheme() {
   return [theme, () => setTheme(theme === 'dark' ? 'light' : 'dark')]
 }
 
+const PAGES = { dashboard: 'Dashboard', inventory: 'Inventory', sensors: 'Sensors', alerts: 'Alerts' }
+const LEVEL_ORDER = { critical: 0, warning: 1, good: 2 }
+
+const pageFromHash = () => {
+  const page = window.location.hash.replace(/^#\/?/, '').split('/')[0]
+  return PAGES[page] ? page : 'dashboard'
+}
+
+function usePage() {
+  const [page, setPage] = useState(pageFromHash)
+  useEffect(() => {
+    const onChange = () => setPage(pageFromHash())
+    window.addEventListener('hashchange', onChange)
+    return () => window.removeEventListener('hashchange', onChange)
+  }, [])
+  const navigate = (target) => {
+    window.location.hash = target === 'dashboard' ? '/' : `/${target}`
+    window.scrollTo({ top: 0 })
+  }
+  return [page, navigate]
+}
+
 export default function App() {
   const { samples, rawReadings, source } = useReadings()
-  const [inventory, setInventory] = useInventory()
-  const { assessment, error: riskError } = useRiskAssessment(rawReadings, inventory)
+  const inventory = useInventory()
+  const health = useHealth()
+  const active = useMemo(
+    () => inventory.items.filter((i) => i.state === 'active').map((i) => ({ ...i, addedAtMs: Date.parse(i.addedAt) })),
+    [inventory.items],
+  )
+  const { assessment, error: riskError } = useRiskAssessment(rawReadings, active)
+  const riskItems = useMemo(() => mergeRisk(samples, active, assessment), [samples, active, assessment])
+  const risks = useMemo(() => new Map(riskItems.map((item) => [item.id, item])), [riskItems])
   const [theme, toggleTheme] = useTheme()
+  const [page, navigate] = usePage()
   const now = useNow()
+  const { toasts, notify, dismiss } = useToasts()
   const [rangeId, setRangeId] = useState('1h')
   const [doorHeld, setDoorHeld] = useState(false)
-  const [activePage, setActivePage] = useState('Dashboard')
+  const [logging, setLogging] = useState(false)
+  const [detailId, setDetailId] = useState(null)
+  const [relogId, setRelogId] = useState(null)
+  const [loadingSamples, setLoadingSamples] = useState(false)
 
   const range = RANGES.find((r) => r.id === rangeId)
   const start = now - range.ms
   const latest = samples[samples.length - 1]
   const online = latest && now - latest.t < OFFLINE_AFTER_MS
-  const title = activePage
-  const inventoryItems = scoreInventory(samples, inventory)
-  const assessedById = new Map((assessment?.items || []).map((item) => [item.id, item]))
-  const displayItems = inventoryItems.map((item) => {
-    const result = assessedById.get(item.id)
-    return result ? {
-      ...item,
-      ...result,
-      profileLabel: PROFILES[item.profile]?.label ?? result.profileLabel,
-      limitF: 40,
-      timeAboveMs: result.dangerZoneHours * 3600e3,
-      remainingHours: result.remainingHours,
-      scoringMode: 'backend',
-    } : { ...item, scoringMode: 'preview' }
-  })
-  const liveRecommendations = recommend(samples, displayItems, doorIntervals(samples))
-  const recommendations = assessment
-    ? [...assessment.recommendations, ...liveRecommendations.filter((rec) => rec.title === 'Close the door')].slice(0, 4)
+  const detailItem = inventory.items.find((i) => i.id === detailId)
+  const relogItem = inventory.items.find((i) => i.id === relogId)
+
+  // Item risk is cumulative, so recommendations always look at the full 24
+  // hours rather than the selected range.
+  const liveRecommendations = recommend(samples, riskItems, doorIntervals(samples))
+  const sensorRecommendations = assessment
+    ? [...assessment.recommendations, ...liveRecommendations.filter((rec) => rec.title === 'Close the door')]
     : liveRecommendations
+  const seen = new Set()
+  const recommendations = [...sensorRecommendations, ...inventoryRecommendations(riskItems, now)]
+    .filter((rec) => !seen.has(rec.title) && seen.add(rec.title))
+    .sort((a, b) => LEVEL_ORDER[a.level] - LEVEL_ORDER[b.level])
   const sensorStates = ZONES.map((zone) => {
-    const reading = [...rawReadings].reverse().find((entry) => entry.sensor_id === zone.id)
+    const reading = rawReadings.findLast((entry) => entry.sensor_id === zone.id)
     return {
       ...zone,
       tempF: Number.isFinite(reading?.temp_c) ? reading.temp_c * 1.8 + 32 : null,
@@ -169,84 +172,197 @@ export default function App() {
     setDoorHeld(!doorHeld)
   }
 
+  const setItemState = async (item, state) => {
+    await inventory.update(item.id, { state })
+    if (state === 'active') {
+      notify(`Put ${item.name} back in the fridge`)
+    } else {
+      notify(`Marked ${item.name} as ${state}`, {
+        label: 'Undo',
+        run: () => inventory.update(item.id, { state: 'active' }).catch((cause) => notify(cause.message)),
+      })
+    }
+  }
+
+  const deleteItem = async (item) => {
+    await inventory.remove(item.id)
+    setDetailId(null)
+    notify(`Deleted ${item.name}`)
+  }
+
+  const loadSamples = async () => {
+    setLoadingSamples(true)
+    try {
+      for (const sample of SAMPLE_ITEMS) await inventory.create(samplePayload(sample))
+      notify(`Added ${SAMPLE_ITEMS.length} sample items`)
+    } catch (cause) {
+      notify(cause.message)
+    } finally {
+      setLoadingSamples(false)
+    }
+  }
+
+  const themeButton = (
+    <button
+      className="btn btn-icon"
+      onClick={toggleTheme}
+      aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+      title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+    >
+      {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
+    </button>
+  )
+
   return (
     <div className="app">
-      <Sidebar activePage={activePage} onNavigate={setActivePage} />
+      <Sidebar page={page} onNavigate={navigate} inventoryCount={active.length} onLog={() => setLogging(true)} />
       <main className="main">
-        <header className="page-header">
-          <h1>{title}</h1>
-          <div className="page-actions">
-            {source?.simulated && (
-              <button className={`btn ${doorHeld ? 'btn-active' : ''}`} onClick={toggleDoor} aria-pressed={doorHeld}>
-                <DoorOpen size={16} />
-                {doorHeld ? 'Close simulated door' : 'Simulate door open'}
-              </button>
-            )}
-            <select className="select" aria-label="Storage unit" defaultValue="cooler-1">
-              <option value="cooler-1">Cooler 1</option>
-            </select>
-            <button
-              className="btn btn-icon"
-              onClick={toggleTheme}
-              aria-label={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-              title={theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
-            >
-              {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-            </button>
-          </div>
-        </header>
+        {page === 'inventory' ? (
+          <>
+            <header className="page-header">
+              <div>
+                <h1>Inventory</h1>
+                <p className="page-sub">What’s in Cooler 1, how it looks, and what to use first</p>
+              </div>
+              <div className="page-actions">
+                <button className="btn btn-active" onClick={() => setLogging(true)}><Camera size={16} /> Log food</button>
+                {themeButton}
+              </div>
+            </header>
+            <InventoryPage
+              items={inventory.items}
+              status={inventory.status}
+              error={inventory.error}
+              reload={inventory.reload}
+              risks={risks}
+              health={health}
+              now={now}
+              onLog={() => setLogging(true)}
+              onOpen={setDetailId}
+              onRelog={(item) => setRelogId(item.id)}
+              onSetState={(item, state) => setItemState(item, state).catch((cause) => notify(cause.message))}
+              onLoadSamples={loadSamples}
+              loadingSamples={loadingSamples}
+            />
+          </>
+        ) : (
+          <>
+            <header className="page-header">
+              <h1>{PAGES[page]}</h1>
+              <div className="page-actions">
+                {source?.simulated && (
+                  <button className={`btn ${doorHeld ? 'btn-active' : ''}`} onClick={toggleDoor} aria-pressed={doorHeld}>
+                    <DoorOpen size={16} />
+                    {doorHeld ? 'Close simulated door' : 'Simulate door open'}
+                  </button>
+                )}
+                <select className="select" aria-label="Storage unit" defaultValue="cooler-1">
+                  <option value="cooler-1">Cooler 1</option>
+                </select>
+                {themeButton}
+              </div>
+            </header>
 
-        <nav className="mobile-nav" aria-label="Main navigation">
-          {['Dashboard', 'Inventory', 'Sensors', 'Alerts'].map((page) => <button key={page} className={activePage === page ? 'selected' : ''} aria-current={activePage === page ? 'page' : undefined} onClick={() => setActivePage(page)}>{page}</button>)}
-        </nav>
+            {page === 'dashboard' && <div className="card">
+              <div className="toolbar">
+                <div className="live">
+                  <span className={`live-dot ${online ? 'on' : ''}`} />
+                  {online ? (
+                    <span>
+                      <strong>Live</strong> · last reading {Math.max(0, Math.round((now - latest.t) / 1000))}s ago
+                    </span>
+                  ) : (
+                    <strong>{latest ? 'Offline' : 'Waiting for readings…'}</strong>
+                  )}
+                  {source?.simulated && <span className="tag">Simulated data</span>}
+                </div>
+                <div className="segmented" role="group" aria-label="Time range">
+                  {RANGES.map((r) => (
+                    <button key={r.id} className={r.id === rangeId ? 'selected' : ''} onClick={() => setRangeId(r.id)}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
 
-        {activePage === 'Dashboard' && <div className="card">
-          <div className="toolbar">
-            <div className="live">
-              <span className={`live-dot ${online ? 'on' : ''}`} />
-              {online ? (
-                <span>
-                  <strong>Live</strong> · last reading {Math.max(0, Math.round((now - latest.t) / 1000))}s ago
-                </span>
+              {latest ? (
+                <Panels
+                  samples={samples}
+                  latest={latest}
+                  range={range}
+                  start={start}
+                  end={now}
+                  riskItems={riskItems}
+                  recommendations={recommendations.slice(0, 4)}
+                  inventoryStatus={inventory.status}
+                  assessment={assessment}
+                  riskError={riskError}
+                  onLog={() => setLogging(true)}
+                  onOpenItem={setDetailId}
+                  onOpenInventory={() => navigate('inventory')}
+                />
               ) : (
-                <strong>{latest ? 'Offline' : 'Waiting for readings…'}</strong>
+                <div className="empty-state dashboard-empty">Waiting for the first sensor reading. The other pages are available from the sidebar.</div>
               )}
-              {source?.simulated && <span className="tag">Simulated data</span>}
-            </div>
-            <div className="segmented" role="group" aria-label="Time range">
-              {RANGES.map((r) => (
-                <button key={r.id} className={r.id === rangeId ? 'selected' : ''} onClick={() => setRangeId(r.id)}>
-                  {r.label}
-                </button>
-              ))}
-            </div>
-          </div>
+            </div>}
 
-          {latest ? <Panels samples={samples} latest={latest} range={range} start={start} end={now} inventory={inventory} setInventory={setInventory} assessment={assessment} riskError={riskError} /> : <div className="empty-state dashboard-empty">Waiting for the first sensor reading. Inventory and setup pages are available from the sidebar.</div>}
-        </div>}
+            {page === 'sensors' && <div className="card">
+              <div className="toolbar">
+                <div className="live">
+                  <span className={`live-dot ${online ? 'on' : ''}`} />
+                  <span><strong>{online ? 'Live sensor feed' : latest ? 'Sensor feed offline' : 'Waiting for readings'}</strong></span>
+                  {source?.simulated && <span className="tag">Simulated data</span>}
+                </div>
+                <div className="segmented" role="group" aria-label="Sensor history time range">
+                  {RANGES.map((r) => (
+                    <button key={r.id} className={r.id === rangeId ? 'selected' : ''} onClick={() => setRangeId(r.id)}>
+                      {r.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <SensorsPage samples={samples} rawReadings={rawReadings} now={now} range={range} />
+            </div>}
 
-        {activePage === 'Inventory' && <div className="card">
-          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{inventory.length} tracked items</strong> · risk scores use sensor exposure</span></div><span className="tag">{assessment ? 'Live risk model' : 'Preview risk estimate'}</span></div>
-          <InventoryRisk items={displayItems} inventory={inventory} setInventory={setInventory} riskActive={Boolean(assessment)} riskError={riskError} fullPage />
-        </div>}
-
-        {activePage === 'Sensors' && <div className="card">
-          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{online ? 'Live sensor feed' : latest ? 'Sensor feed offline' : 'Waiting for readings'}</strong></span>{source?.simulated && <span className="tag">Simulated data</span>}</div>
-            <div className="segmented" role="group" aria-label="Sensor history time range">{RANGES.map((r) => <button key={r.id} className={r.id === rangeId ? 'selected' : ''} onClick={() => setRangeId(r.id)}>{r.label}</button>)}</div>
-          </div>
-          <SensorsPage samples={samples} rawReadings={rawReadings} now={now} range={range} />
-        </div>}
-
-        {activePage === 'Alerts' && <div className="card">
-          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{online ? 'Monitoring active' : 'Monitoring paused'}</strong> · food and sensor status</span></div><span className="tag">Cooler 1</span></div>
-          <AlertsPage recommendations={recommendations} sensors={sensorStates} now={now} riskActive={Boolean(assessment)} />
-        </div>}
+            {page === 'alerts' && <div className="card">
+              <div className="toolbar">
+                <div className="live">
+                  <span className={`live-dot ${online ? 'on' : ''}`} />
+                  <span><strong>{online ? 'Monitoring active' : 'Monitoring paused'}</strong> · food and sensor status</span>
+                </div>
+                <span className="tag">Cooler 1</span>
+              </div>
+              <AlertsPage recommendations={recommendations} sensors={sensorStates} now={now} riskActive={Boolean(assessment)} />
+            </div>}
+          </>
+        )}
       </main>
+      <MobileNav page={page} onNavigate={navigate} onLog={() => setLogging(true)} />
+
+      {logging && (
+        <LogFoodFlow onClose={() => setLogging(false)} onCreate={inventory.create} notify={notify} visionReady={health?.vision} />
+      )}
+      {detailItem && (
+        <ItemDetail
+          item={detailItem}
+          risk={risks.get(detailItem.id)}
+          now={now}
+          onClose={() => setDetailId(null)}
+          onRelog={(item) => setRelogId(item.id)}
+          onUpdate={inventory.update}
+          onSetState={setItemState}
+          onDelete={deleteItem}
+        />
+      )}
+      {relogItem && (
+        <RelogFlow item={relogItem} onClose={() => setRelogId(null)} onCheck={inventory.addCheck} notify={notify} />
+      )}
+      <Toasts toasts={toasts} dismiss={dismiss} />
     </div>
   )
 }
 
-function Panels({ samples, latest, range, start, end, inventory, setInventory, assessment, riskError }) {
+function Panels({ samples, latest, range, start, end, riskItems, recommendations, inventoryStatus, assessment, riskError, onLog, onOpenItem, onOpenInventory }) {
   const windowed = samples.filter((s) => s.t >= start)
   const doors = doorIntervals(windowed)
 
@@ -261,27 +377,6 @@ function Panels({ samples, latest, range, start, end, inventory, setInventory, a
     }
   })
 
-  // Item risk is cumulative, so it always looks at the full 24 hours rather
-  // than the selected range.
-  const previewItems = scoreInventory(samples, inventory)
-  const assessedById = new Map((assessment?.items || []).map((item) => [item.id, item]))
-  const items = previewItems.map((item) => {
-    const result = assessedById.get(item.id)
-    return result ? {
-      ...item,
-      ...result,
-      profileLabel: PROFILES[item.profile]?.label ?? result.profileLabel,
-      limitF: 40,
-      timeAboveMs: result.dangerZoneHours * 3600e3,
-      remainingHours: result.remainingHours,
-      scoringMode: 'backend',
-    } : { ...item, scoringMode: 'preview' }
-  })
-  const liveRecommendations = recommend(samples, items, doorIntervals(samples))
-  const recommendations = assessment
-    ? [...assessment.recommendations, ...liveRecommendations.filter((rec) => rec.title === 'Close the door')].slice(0, 4)
-    : liveRecommendations
-
   return (
     <>
       <div className="split">
@@ -292,7 +387,15 @@ function Panels({ samples, latest, range, start, end, inventory, setInventory, a
           bands={bandDurations(windowed)}
           rangeLabel={range.label}
         />
-        <InventoryRisk items={items} inventory={inventory} setInventory={setInventory} riskActive={Boolean(assessment)} riskError={riskError} />
+        <InventoryRisk
+          items={riskItems}
+          inventoryStatus={inventoryStatus}
+          onLog={onLog}
+          onOpenItem={onOpenItem}
+          onOpenInventory={onOpenInventory}
+          riskActive={Boolean(assessment)}
+          riskError={riskError}
+        />
       </div>
       <ExposureHistory
         rows={bucketize(windowed, range.bucketMs)}
