@@ -56,11 +56,14 @@ ShelfSense tracks **historical environmental exposure** and evaluates it against
 > Update these steps to match the final repo layout.
 
 **Backend**
+
+The FastAPI server isn't built yet. For now the backend is the `risk` package, which has no dependencies outside the standard library. To run its tests:
 ```bash
 cd backend
-pip install -r requirements.txt
-uvicorn main:app --reload
+pip install pytest
+pytest
 ```
+See `backend/risk/HOW_IT_WORKS.md` for how the risk model scores each item.
 
 **Frontend**
 ```bash
