@@ -9,7 +9,7 @@ const NAV = [
   { label: 'Settings', Icon: Settings },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ activePage, onNavigate }) {
   return (
     <aside className="sidebar">
       <div className="brand">
@@ -19,13 +19,14 @@ export default function Sidebar() {
         ShelfSense
       </div>
       <nav>
-        {NAV.map(({ label, Icon, active }) => (
+        {NAV.map(({ label, Icon }) => (
           <button
             key={label}
-            className={`nav-item ${active ? 'active' : ''}`}
-            aria-current={active ? 'page' : undefined}
-            disabled={!active}
-            title={active ? undefined : 'Coming soon'}
+            className={`nav-item ${activePage === label ? 'active' : ''}`}
+            aria-current={activePage === label ? 'page' : undefined}
+            disabled={!['Dashboard', 'Inventory', 'Sensors', 'Alerts'].includes(label)}
+            title={['Dashboard', 'Inventory', 'Sensors', 'Alerts'].includes(label) ? undefined : 'Coming soon'}
+            onClick={() => onNavigate(label)}
           >
             <Icon size={18} strokeWidth={1.6} />
             {label}

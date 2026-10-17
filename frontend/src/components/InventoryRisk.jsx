@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { Camera, Plus, ScanLine, Trash2, Upload, X } from 'lucide-react'
+import { Camera, Plus, ScanLine, Search, Trash2, Upload, X } from 'lucide-react'
 import { ZONES } from '../config.js'
 import { ITEM_STATUS, PROFILES } from '../lib/risk.js'
 import StatusBadge, { StatusIcon } from './StatusBadge.jsx'
@@ -50,19 +50,26 @@ function localDateTimeNow() {
 
 const blankItem = () => ({ name: '', profile: 'dairy', zone: 'mid', packaged: false, addedAtLocal: localDateTimeNow() })
 
-export default function InventoryRisk({ items, inventory, setInventory, riskActive, riskError }) {
+export default function InventoryRisk({ items, inventory, setInventory, riskActive, riskError, fullPage = false }) {
   const [mode, setMode] = useState(null)
   const [manual, setManual] = useState(blankItem)
   const [photo, setPhoto] = useState(null)
   const [suggestions, setSuggestions] = useState([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+  const [query, setQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('all')
   const fileRef = useRef(null)
   const counts = Object.fromEntries(ORDER.map((id) => [id, items.filter((item) => {
     if (id === 'soon') return ['soon', 'use_soon'].includes(item.status)
     if (id === 'risk') return ['risk', 'at_risk'].includes(item.status)
     return item.status === id
   }).length]))
+  const visibleItems = items.filter((item) => {
+    const matchesQuery = item.name.toLowerCase().includes(query.trim().toLowerCase()) || item.profileLabel?.toLowerCase().includes(query.trim().toLowerCase())
+    const matchesStatus = statusFilter === 'all' || (statusFilter === 'soon' ? ['soon', 'use_soon'].includes(item.status) : statusFilter === 'risk' ? ['risk', 'at_risk', 'expired', 'discard'].includes(item.status) : item.status === statusFilter)
+    return matchesQuery && matchesStatus
+  })
 
   const closeEditor = () => {
     setMode(null)
@@ -141,9 +148,9 @@ export default function InventoryRisk({ items, inventory, setInventory, riskActi
   }
 
   return (
-    <section className="panel">
+    <section className={`panel ${fullPage ? 'inventory-page' : ''}`}>
       <div className="panel-head">
-        <h2>Inventory risk</h2>
+        <h2>{fullPage ? 'Food inventory' : 'Inventory risk'}</h2>
         <button className="btn" onClick={() => { setMode('choose'); setError('') }}><Plus size={15} /> Add items</button>
       </div>
       <p className={`risk-engine-note ${riskActive ? 'active' : ''}`} role="status">
@@ -204,14 +211,20 @@ export default function InventoryRisk({ items, inventory, setInventory, riskActi
       </div>}
 
       {items.length === 0 ? <p className="empty-inventory">No food yet. Add items manually or scan a photo to get started.</p> : <div className="table-scroll">
+        {fullPage && <div className="inventory-filters">
+          <label className="inventory-search"><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search inventory" aria-label="Search inventory" /></label>
+          <label className="filter-select"><span className="visually-hidden">Filter by status</span><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}><option value="all">All statuses ({items.length})</option><option value="good">Good ({counts.good})</option><option value="soon">Use soon ({counts.soon})</option><option value="risk">At risk ({counts.risk + counts.expired + counts.discard})</option></select></label>
+          <span className="inventory-result-count">{visibleItems.length} of {items.length} items</span>
+        </div>}
         <table className="table">
           <thead><tr><th>Item</th><th>Profile</th><th>Zone</th><th>In fridge since</th><th className="num">Score</th><th>Status</th><th><span className="visually-hidden">Remove</span></th></tr></thead>
-          <tbody>{items.map((item) => <tr key={item.id}>
+          <tbody>{visibleItems.map((item) => <tr key={item.id}>
             <td>{item.name}{item.packaged && <span className="packaged-tag">Packaged</span>}</td><td className="muted">{item.profileLabel}{['produce', 'other'].includes(item.profile) && ' · estimate'}</td><td className="muted">{item.zoneLabel}</td><td className="muted">{item.addedAtMs ? new Date(item.addedAtMs).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }) : 'Unknown'}{item.gapHours > 0 && <span className="data-gap">{` · ${item.gapHours.toFixed(1)}h unobserved`}</span>}</td><td className="num strong">{item.score}{item.scoringMode === 'preview' && <small className="remaining-hours">Preview</small>}{item.scoringMode === 'backend' && Number.isFinite(item.remainingHours) && <small className="remaining-hours">{`${item.remainingHours.toFixed(0)}h left`}</small>}</td>
             <td><StatusBadge level={ITEM_STATUS[item.status].level} label={ITEM_STATUS[item.status].label} /></td>
             <td><button className="row-remove" aria-label={`Remove ${item.name}`} onClick={() => setInventory((current) => current.filter((entry) => entry.id !== item.id))}><Trash2 size={14} /></button></td>
           </tr>)}</tbody>
         </table>
+        {fullPage && visibleItems.length === 0 && <div className="empty-state">No inventory matches those filters.</div>}
       </div>}
       <p className="caption">Storage-quality score out of 100, estimated from sensor exposure over the last 24 hours.</p>
     </section>

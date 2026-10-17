@@ -20,6 +20,8 @@ import InventoryRisk from './components/InventoryRisk.jsx'
 import ExposureHistory from './components/ExposureHistory.jsx'
 import Recommendations from './components/Recommendations.jsx'
 import AtAGlance from './components/AtAGlance.jsx'
+import SensorsPage from './components/SensorsPage.jsx'
+import AlertsPage from './components/AlertsPage.jsx'
 
 const THEME_KEY = 'shelfsense-theme'
 const INVENTORY_KEY = 'shelfsense-inventory'
@@ -127,11 +129,40 @@ export default function App() {
   const now = useNow()
   const [rangeId, setRangeId] = useState('1h')
   const [doorHeld, setDoorHeld] = useState(false)
+  const [activePage, setActivePage] = useState('Dashboard')
 
   const range = RANGES.find((r) => r.id === rangeId)
   const start = now - range.ms
   const latest = samples[samples.length - 1]
   const online = latest && now - latest.t < OFFLINE_AFTER_MS
+  const title = activePage
+  const inventoryItems = scoreInventory(samples, inventory)
+  const assessedById = new Map((assessment?.items || []).map((item) => [item.id, item]))
+  const displayItems = inventoryItems.map((item) => {
+    const result = assessedById.get(item.id)
+    return result ? {
+      ...item,
+      ...result,
+      profileLabel: PROFILES[item.profile]?.label ?? result.profileLabel,
+      limitF: 40,
+      timeAboveMs: result.dangerZoneHours * 3600e3,
+      remainingHours: result.remainingHours,
+      scoringMode: 'backend',
+    } : { ...item, scoringMode: 'preview' }
+  })
+  const liveRecommendations = recommend(samples, displayItems, doorIntervals(samples))
+  const recommendations = assessment
+    ? [...assessment.recommendations, ...liveRecommendations.filter((rec) => rec.title === 'Close the door')].slice(0, 4)
+    : liveRecommendations
+  const sensorStates = ZONES.map((zone) => {
+    const reading = [...rawReadings].reverse().find((entry) => entry.sensor_id === zone.id)
+    return {
+      ...zone,
+      tempF: Number.isFinite(reading?.temp_c) ? reading.temp_c * 1.8 + 32 : null,
+      humidity: reading?.humidity,
+      at: reading ? Date.parse(reading.timestamp) : null,
+    }
+  })
 
   const toggleDoor = () => {
     source.setDoorOpen(!doorHeld)
@@ -140,10 +171,10 @@ export default function App() {
 
   return (
     <div className="app">
-      <Sidebar />
+      <Sidebar activePage={activePage} onNavigate={setActivePage} />
       <main className="main">
         <header className="page-header">
-          <h1>Dashboard</h1>
+          <h1>{title}</h1>
           <div className="page-actions">
             {source?.simulated && (
               <button className={`btn ${doorHeld ? 'btn-active' : ''}`} onClick={toggleDoor} aria-pressed={doorHeld}>
@@ -165,7 +196,11 @@ export default function App() {
           </div>
         </header>
 
-        <div className="card">
+        <nav className="mobile-nav" aria-label="Main navigation">
+          {['Dashboard', 'Inventory', 'Sensors', 'Alerts'].map((page) => <button key={page} className={activePage === page ? 'selected' : ''} aria-current={activePage === page ? 'page' : undefined} onClick={() => setActivePage(page)}>{page}</button>)}
+        </nav>
+
+        {activePage === 'Dashboard' && <div className="card">
           <div className="toolbar">
             <div className="live">
               <span className={`live-dot ${online ? 'on' : ''}`} />
@@ -187,8 +222,25 @@ export default function App() {
             </div>
           </div>
 
-          {latest && <Panels samples={samples} latest={latest} range={range} start={start} end={now} inventory={inventory} setInventory={setInventory} assessment={assessment} riskError={riskError} />}
-        </div>
+          {latest ? <Panels samples={samples} latest={latest} range={range} start={start} end={now} inventory={inventory} setInventory={setInventory} assessment={assessment} riskError={riskError} /> : <div className="empty-state dashboard-empty">Waiting for the first sensor reading. Inventory and setup pages are available from the sidebar.</div>}
+        </div>}
+
+        {activePage === 'Inventory' && <div className="card">
+          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{inventory.length} tracked items</strong> · risk scores use sensor exposure</span></div><span className="tag">{assessment ? 'Live risk model' : 'Preview risk estimate'}</span></div>
+          <InventoryRisk items={displayItems} inventory={inventory} setInventory={setInventory} riskActive={Boolean(assessment)} riskError={riskError} fullPage />
+        </div>}
+
+        {activePage === 'Sensors' && <div className="card">
+          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{online ? 'Live sensor feed' : latest ? 'Sensor feed offline' : 'Waiting for readings'}</strong></span>{source?.simulated && <span className="tag">Simulated data</span>}</div>
+            <div className="segmented" role="group" aria-label="Sensor history time range">{RANGES.map((r) => <button key={r.id} className={r.id === rangeId ? 'selected' : ''} onClick={() => setRangeId(r.id)}>{r.label}</button>)}</div>
+          </div>
+          <SensorsPage samples={samples} rawReadings={rawReadings} now={now} range={range} />
+        </div>}
+
+        {activePage === 'Alerts' && <div className="card">
+          <div className="toolbar"><div className="live"><span className={`live-dot ${online ? 'on' : ''}`} /><span><strong>{online ? 'Monitoring active' : 'Monitoring paused'}</strong> · food and sensor status</span></div><span className="tag">Cooler 1</span></div>
+          <AlertsPage recommendations={recommendations} sensors={sensorStates} now={now} riskActive={Boolean(assessment)} />
+        </div>}
       </main>
     </div>
   )

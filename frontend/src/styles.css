@@ -188,6 +188,17 @@ h2 {
   font-weight: 600;
 }
 
+.nav-item:not(:disabled) {
+  cursor: pointer;
+}
+
+.nav-item:not(:disabled):hover:not(.active) {
+  background: color-mix(in srgb, var(--accent-wash), transparent 45%);
+  color: var(--text-primary);
+}
+
+.mobile-nav { display: none; }
+
 /* Controls */
 
 .btn,
@@ -826,6 +837,131 @@ h2 {
   overflow: auto;
 }
 
+/* Inventory, sensors, and alerts pages */
+
+.tab-panel {
+  padding-top: 30px;
+}
+
+.tab-intro {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.tab-intro h2 {
+  font-size: 20px;
+}
+
+.tab-intro p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.status-pill.good { color: var(--status-good); }
+.status-pill.warning { color: #a76d00; }
+:root[data-theme='dark'] .status-pill.warning { color: var(--status-warning); }
+.status-pill.critical { color: var(--status-critical); }
+
+.metric-cards {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.metric-card {
+  position: relative;
+  display: grid;
+  gap: 7px;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface), var(--page) 30%);
+}
+
+.metric-card > span { color: var(--text-secondary); font-size: 12px; }
+.metric-card strong { font-size: 23px; font-weight: 600; line-height: 1.1; }
+.metric-card strong small { color: var(--text-muted); font-size: 14px; font-weight: 400; }
+.metric-card > svg { position: absolute; top: 16px; right: 16px; color: var(--text-muted); }
+
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sensor-card {
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+
+.sensor-card-head { display: flex; align-items: center; gap: 10px; }
+.sensor-card-head > div { display: grid; min-width: 0; }
+.sensor-card-head small { color: var(--text-muted); font-size: 11px; }
+.sensor-marker { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.sensor-connection { width: 8px; height: 8px; margin-left: auto; border-radius: 50%; background: var(--status-critical); }
+.sensor-connection.online { background: var(--status-good); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-good), transparent 82%); }
+.sensor-temperature { margin: 23px 0 15px; font-size: 44px; font-weight: 300; line-height: 1; font-variant-numeric: tabular-nums; }
+.sensor-temperature small { margin-left: 4px; font-size: 17px; color: var(--text-muted); }
+.sensor-temperature.over-limit { color: var(--status-critical); }
+.sensor-details { display: flex; justify-content: space-between; gap: 10px; color: var(--text-muted); font-size: 12px; }
+.sensor-details strong { margin-left: 5px; color: var(--text-primary); }
+.sensor-limit-note { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--grid); color: var(--text-secondary); font-size: 11px; }
+.sensor-chart-section { margin-top: 30px; padding-top: 24px; border-top: 1px solid var(--border); }
+.sensor-chart-section .caption { margin: 0; }
+.sensor-chart { margin-top: 18px; }
+
+.inventory-page .panel-head { margin-bottom: 4px; }
+.inventory-filters { display: flex; align-items: center; gap: 10px; margin: 20px 0 12px; }
+.inventory-search { display: flex; align-items: center; gap: 8px; width: min(340px, 100%); height: 36px; padding: 0 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-muted); }
+.inventory-search input { width: 100%; min-width: 0; border: 0; outline: 0; color: var(--text-primary); background: transparent; font: inherit; }
+.filter-select select { height: 36px; padding: 0 30px 0 10px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-primary); background: var(--surface); font: inherit; }
+.inventory-result-count { margin-left: auto; color: var(--text-muted); font-size: 12px; white-space: nowrap; }
+.empty-state { padding: 26px 16px; border: 1px dashed var(--border); border-radius: 5px; color: var(--text-secondary); text-align: center; }
+.dashboard-empty { margin: 20px; }
+
+.alert-summary { display: grid; grid-template-columns: repeat(3, minmax(100px, .7fr)) minmax(220px, 1.5fr); align-items: center; gap: 14px; padding: 18px; border: 1px solid var(--border); border-radius: 6px; background: color-mix(in srgb, var(--surface), var(--page) 30%); }
+.alert-summary > div:not(.alert-model) { display: grid; gap: 2px; }
+.alert-summary strong { font-size: 24px; font-weight: 600; }
+.alert-summary span { color: var(--text-secondary); font-size: 12px; }
+.alert-model { display: flex; align-items: center; gap: 9px; padding-left: 16px; border-left: 1px solid var(--border); color: var(--text-muted); }
+.alerts-heading { display: flex; align-items: center; justify-content: space-between; margin: 26px 0 12px; }
+.alerts-heading span { color: var(--text-muted); font-size: 12px; }
+.alert-list { display: grid; gap: 10px; }
+.alert-card { display: flex; align-items: flex-start; gap: 12px; padding: 16px; border: 1px solid var(--border); border-radius: 6px; }
+.alert-card > svg { flex: none; margin-top: 2px; }
+.alert-card.acknowledged { background: color-mix(in srgb, var(--surface), var(--page) 35%); }
+.alert-copy { min-width: 0; flex: 1; }
+.alert-title-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.alert-severity { padding: 2px 7px; border-radius: 999px; font-size: 10px; font-weight: 700; }
+.alert-severity.critical { color: var(--status-critical); background: color-mix(in srgb, var(--status-critical), transparent 88%); }
+.alert-severity.warning { color: #946100; background: color-mix(in srgb, var(--status-warning), transparent 80%); }
+:root[data-theme='dark'] .alert-severity.warning { color: var(--status-warning); }
+.alert-severity.resolved { color: var(--status-good); background: color-mix(in srgb, var(--status-good), transparent 88%); }
+.alert-copy p { margin: 5px 0; color: var(--text-secondary); }
+.alert-copy small { color: var(--text-muted); font-size: 11px; }
+.alert-action { flex: none; }
+.all-clear { display: flex; align-items: center; gap: 13px; padding: 24px 18px; border: 1px solid color-mix(in srgb, var(--status-good), var(--border) 60%); border-radius: 6px; color: var(--status-good); }
+.all-clear strong { color: var(--text-primary); }
+.all-clear p { margin: 3px 0 0; color: var(--text-secondary); }
+
 .table-scroll .table {
   margin-top: 0;
 }
@@ -900,6 +1036,10 @@ h2 {
     display: none;
   }
 
+  .mobile-nav { display: flex; gap: 6px; margin: -6px 0 18px; overflow-x: auto; }
+  .mobile-nav button { flex: 1; min-width: max-content; padding: 8px 12px; border: 1px solid var(--border); border-radius: 4px; color: var(--text-secondary); background: var(--surface); cursor: pointer; }
+  .mobile-nav button.selected { border-color: var(--accent-wash); color: var(--accent-ink); background: var(--accent-wash); font-weight: 700; }
+
   .main {
     padding: 20px 16px 40px;
   }
@@ -926,6 +1066,11 @@ h2 {
     display: block;
     overflow-x: auto;
   }
+
+  .metric-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sensor-grid { grid-template-columns: 1fr; }
+  .alert-summary { grid-template-columns: repeat(3, 1fr); }
+  .alert-model { grid-column: 1 / -1; padding: 12px 0 0; border-left: 0; border-top: 1px solid var(--border); }
 }
 
 @media (max-width: 560px) {
@@ -959,4 +1104,17 @@ h2 {
   .confidence {
     grid-row: auto;
   }
+
+  .metric-cards { gap: 8px; }
+  .metric-card { padding: 12px; }
+  .metric-card > svg { top: 12px; right: 12px; }
+  .metric-card strong { font-size: 19px; }
+  .inventory-filters { align-items: stretch; flex-direction: column; }
+  .inventory-search { width: 100%; }
+  .inventory-result-count { margin: 0; }
+  .alert-summary { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 12px; }
+  .alert-summary strong { font-size: 20px; }
+  .alert-card { flex-wrap: wrap; }
+  .alert-action { margin-left: 30px; }
+  .tab-intro { flex-direction: column; }
 }
