@@ -28,13 +28,14 @@ export default function SensorsPage({ samples, rawReadings, now, range }) {
     ...Object.fromEntries(ZONES.map((zone) => [zone.id, sample.zones[zone.id]?.tempF])),
   }))
   const connected = sensors.filter((sensor) => sensor.online).length
-  const avgTemp = sensors.filter((sensor) => Number.isFinite(sensor.tempF)).reduce((sum, sensor, _, all) => sum + sensor.tempF / all.length, 0)
+  const temperatures = sensors.map((sensor) => sensor.tempF).filter(Number.isFinite)
+  const avgTemp = temperatures.length ? temperatures.reduce((sum, temp) => sum + temp, 0) / temperatures.length : null
 
   return <section className="panel tab-panel">
     <div className="tab-intro"><div><h2>Sensor status</h2><p>Live temperature and humidity by storage zone.</p></div><span className={`status-pill ${connected === ZONES.length ? 'good' : connected ? 'warning' : 'critical'}`}>{connected === ZONES.length ? <Wifi size={15} /> : <WifiOff size={15} />}{connected}/{ZONES.length} online</span></div>
     <div className="metric-cards">
       <div className="metric-card"><span>Connected sensors</span><strong>{connected}<small> / {ZONES.length}</small></strong><Wifi size={17} /></div>
-      <div className="metric-card"><span>Average temperature</span><strong>{Number.isFinite(avgTemp) ? `${avgTemp.toFixed(1)}°F` : '—'}</strong><Thermometer size={17} /></div>
+      <div className="metric-card"><span>Average temperature</span><strong>{Number.isFinite(avgTemp) ? `${avgTemp.toFixed(1)}°F` : 'Waiting'}</strong><Thermometer size={17} /></div>
       <div className="metric-card"><span>Safe limit</span><strong>{SAFE_LIMIT_F}°F</strong><CheckCircle2 size={17} /></div>
       <div className="metric-card"><span>Last update</span><strong>{sensors.some((sensor) => sensor.at !== null) ? `${Math.max(0, Math.round((now - Math.max(...sensors.map((sensor) => sensor.at ?? 0))) / 1000))}s ago` : 'Waiting'}</strong><Clock3 size={17} /></div>
     </div>
