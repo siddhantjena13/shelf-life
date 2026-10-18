@@ -145,4 +145,6 @@ ShelfLife provides **environmental decision support**. Ambient sensors assess st
 
 ## Team
 
-- *Add team members here*
+- Arindam Sanyal
+- Vineeth Rajesh
+- Siddhant Jena
