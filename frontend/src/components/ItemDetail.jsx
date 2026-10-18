@@ -4,11 +4,11 @@ import { photoUrl } from '../lib/api.js'
 import {
   CATEGORIES, DATE_KINDS, FRESHNESS, attention, expiryInfo, formatShortDate, storedFor, timeAgo, toLocalInput, fromLocalInput, zoneLabel,
 } from '../lib/food.js'
-import { ITEM_STATUS, PROFILES } from '../lib/risk.js'
+import { PROFILES } from '../lib/risk.js'
 import { FreshnessMeter, FreshnessPill, FreshnessTrend } from './Freshness.jsx'
 import ItemFields, { blankDraft, draftProblem } from './ItemFields.jsx'
 import Modal from './Modal.jsx'
-import { ScoreRing } from './FoodCard.jsx'
+import FreshnessEstimate from './FreshnessEstimate.jsx'
 import { StatusIcon } from './StatusBadge.jsx'
 
 const fullDate = (iso) => new Date(iso).toLocaleString([], { dateStyle: 'medium', timeStyle: 'short' })
@@ -66,7 +66,6 @@ export default function ItemDetail({ item, risk, now, onClose, onRelog, onUpdate
   const { Icon } = CATEGORIES[item.profile]
   const { reasons } = attention(item, risk, now)
   const expiry = expiryInfo(item, now)
-  const status = risk && ITEM_STATUS[risk.status]
   const checks = [...item.checks].reverse()
   const closed = item.state !== 'active'
 
@@ -119,6 +118,8 @@ export default function ItemDetail({ item, risk, now, onClose, onRelog, onUpdate
           />
         ) : (
           <>
+            {!closed && <FreshnessEstimate item={item} risk={risk} />}
+
             {!closed && reasons.length > 0 && (
               <ul className="reasons">
                 {reasons.map((r) => (
@@ -145,22 +146,10 @@ export default function ItemDetail({ item, risk, now, onClose, onRelog, onUpdate
                 </div>
                 <span className="muted">{expiry ? expiry.relative[0].toUpperCase() + expiry.relative.slice(1) : 'Add one with Edit'}</span>
               </div>
-              <div className="detail-stat">
-                <small>Storage score</small>
-                <div className="detail-stat-main">
-                  <ScoreRing score={risk?.score} level={status?.level} size={44} />
-                  <strong>{status?.label ?? 'Waiting for sensors'}</strong>
-                </div>
-                <span className="muted">
-                  {risk?.scoringMode === 'backend'
-                    ? `~${Math.max(0, Math.round(risk.remainingHours))}h of shelf life left · ${risk.dangerZoneHours.toFixed(1)}h above 40°F`
-                    : 'Preview estimate from sensor readings'}
-                </span>
-              </div>
             </div>
             <p className="caption">
-              “Looks” is what the camera or you saw. The storage score comes from the sensors’ temperature and humidity history.
-              Neither one can confirm food is safe.
+              The estimate combines the printed date, USDA storage times, the sensors’ temperature and humidity history,
+              and every freshness check. It estimates quality; it can’t confirm food is safe.
             </p>
 
             <section className="timeline">

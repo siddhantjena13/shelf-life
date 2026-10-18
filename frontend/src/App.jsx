@@ -15,7 +15,7 @@ import {
   tempLevel,
 } from './lib/metrics.js'
 import { mergeRisk, recommend } from './lib/risk.js'
-import { SAMPLE_ITEMS, inventoryRecommendations, samplePayload } from './lib/food.js'
+import { SAMPLE_ITEMS, endOfLocalDay, inventoryRecommendations, samplePayload } from './lib/food.js'
 import Sidebar, { MobileNav } from './components/Sidebar.jsx'
 import { readSavedValue } from './lib/storage.js'
 import StorageConditions from './components/StorageConditions.jsx'
@@ -58,6 +58,11 @@ function useRiskAssessment(rawReadings, inventory) {
               zone: item.zone,
               packaged: item.packaged,
               added_at: item.addedAt,
+              expires_at: item.expiresOn ? endOfLocalDay(item.expiresOn) : null,
+              date_kind: item.dateKind,
+              checks: item.checks
+                .filter((check) => check.freshness)
+                .map((check) => ({ at: check.at, freshness: check.freshness, source: check.source, confidence: check.confidence })),
             })),
           }),
         })

@@ -1,6 +1,6 @@
 import { Camera, Check } from 'lucide-react'
 import { photoUrl } from '../lib/api.js'
-import { CATEGORIES, FRESHNESS, attention, expiryInfo, storedFor, timeAgo, zoneLabel } from '../lib/food.js'
+import { CATEGORIES, FRESHNESS, attention, expiryInfo, formatHours, storedFor, timeAgo, zoneLabel } from '../lib/food.js'
 import { ITEM_STATUS } from '../lib/risk.js'
 import { FreshnessMeter } from './Freshness.jsx'
 import { StatusIcon } from './StatusBadge.jsx'
@@ -38,6 +38,11 @@ export default function FoodCard({ item, risk, now, onOpen, onRelog, onUsed, sty
   const expiry = expiryInfo(item, now)
   const { Icon, short } = CATEGORIES[item.profile]
   const status = risk && ITEM_STATUS[risk.status]
+  const modelled = risk?.scoringMode === 'backend'
+  const left = !risk ? '—'
+    : !modelled ? status.label
+      : risk.pSpoiled >= 0.5 ? 'Past its best'
+        : `~${formatHours(risk.remainingHours)}`
 
   return (
     <article className={`food-card attention-${level}`} style={style}>
@@ -73,11 +78,11 @@ export default function FoodCard({ item, risk, now, onOpen, onRelog, onUsed, sty
                 {expiry ? `${expiry.kind} ${expiry.relative}` : 'None'}
               </strong>
             </div>
-            <div className="food-score">
+            <div className="food-score" title={modelled ? `Likely ${Math.round(risk.remainingLow)}–${Math.round(risk.remainingHigh)} h left` : undefined}>
               <ScoreRing score={risk?.score} level={status?.level} size={36} />
               <span>
-                <small>Storage</small>
-                <strong>{status ? status.label : '—'}</strong>
+                <small>{modelled && risk.pSpoiled < 0.5 ? 'Left' : 'Freshness'}</small>
+                <strong>{left}</strong>
               </span>
             </div>
           </div>

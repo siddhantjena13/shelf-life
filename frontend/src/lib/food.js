@@ -80,7 +80,7 @@ export function attention(item, risk, now = Date.now()) {
   else if (expiry?.level === 'warning') raise('warning', `${expiry.kind} date is ${expiry.relative}`, `${expiry.kind} ${expiry.relative}`, 'date')
 
   const status = risk && ITEM_STATUS[risk.status]
-  if (status && status.level !== 'good') raise(status.level, `Storage model: ${status.label.toLowerCase()}`, status.label, 'sensors')
+  if (status && status.level !== 'good') raise(status.level, `Freshness estimate: ${status.label.toLowerCase()}`, status.label, 'sensors')
   return { level, reasons }
 }
 
@@ -165,6 +165,30 @@ export function storedFor(iso, now = Date.now()) {
   if (hours < 36) return `${Math.round(hours)}h`
   const days = Math.round(hours / 24)
   return `${days} day${days === 1 ? '' : 's'}`
+}
+
+// "9 h", "2.5 days", "12 days"
+export function formatHours(hours) {
+  if (!Number.isFinite(hours)) return '—'
+  if (hours < 1) return `${Math.max(0, Math.round(hours * 60))} min`
+  if (hours < 36) return `${Math.round(hours)} h`
+  const days = hours / 24
+  return `${days < 10 ? Number(days.toFixed(1)) : Math.round(days)} days`
+}
+
+// "6–14 h", "1.5–3 days": one unit for both ends.
+export function formatHoursRange(lo, hi) {
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) return '—'
+  if (hi < 36) return `${Math.round(lo)}–${Math.round(hi)} h`
+  const day = (h) => (h / 24 < 10 ? Number((h / 24).toFixed(1)) : Math.round(h / 24))
+  return `${day(lo)}–${day(hi)} days`
+}
+
+// A printed date covers the whole local day it names.
+export function endOfLocalDay(iso) {
+  const end = parseLocalDate(iso)
+  end.setHours(23, 59, 59, 999)
+  return end.toISOString()
 }
 
 // <input type="datetime-local"> works in local wall-clock time.
