@@ -2,7 +2,8 @@
 
 from dataclasses import dataclass
 
-from .engine import TWO_HOUR_LIMIT_H, Assessment
+from .engine import TWO_HOUR_LIMIT_H
+from .freshness import Assessment
 
 
 @dataclass
@@ -19,6 +20,12 @@ def _hours(h: float) -> str:
     if h < 48:
         return f'{h:.1f} h'
     return f'{h / 24:.1f} days'
+
+
+def _range(lo: float, hi: float) -> str:
+    if hi - lo < 1:
+        return _hours((lo + hi) / 2)
+    return f'{_hours(lo)} to {_hours(hi)}'
 
 
 def _to_f(c: float) -> float:
@@ -44,12 +51,29 @@ def recommend(assessments: list[Assessment], zone_avg_temp_c: dict[str, float]) 
             ))
             continue
         if a.status == 'expired':
-            recs.append(Recommendation('critical', f'Check the {name} before using',
-                                       'It is past its estimated shelf life.', a.item.id))
+            reason = (
+                f'It has probably wilted: about {a.water_loss_pct:.1f}% of its weight was lost to dry air.'
+                if a.limiting == 'water' and a.water_loss_pct is not None
+                else f'There is a {a.p_spoiled:.0%} chance it is past its best.'
+            )
+            recs.append(Recommendation('critical', f'Check the {name} before using', reason, a.item.id))
             continue
         if a.status == 'at_risk':
             recs.append(Recommendation('critical', f'Use the {name} today',
-                                       f'About {_hours(a.remaining_hours)} of shelf life left.', a.item.id))
+                                       f'Likely {_range(a.remaining_low, a.remaining_high)} of shelf life left.', a.item.id))
+
+        if (
+            a.water_limit_pct
+            and not a.item.packaged
+            and a.water_loss_pct is not None
+            and (a.water_loss_pct >= 0.5 * a.water_limit_pct or a.limiting == 'water')
+        ):
+            recs.append(Recommendation(
+                'warning', f'Bag the {name} or move them to the crisper',
+                f'They have lost about {a.water_loss_pct:.1f}% of their weight to dry air; '
+                f'around {a.water_limit_pct:.0f}% they wilt.',
+                a.item.id,
+            ))
 
         lost = a.loss_by_cause
         total_lost = sum(lost.values())
@@ -61,12 +85,6 @@ def recommend(assessments: list[Assessment], zone_avg_temp_c: dict[str, float]) 
                 'warning', f'Dry the {name}',
                 f'Moisture condensed on them for {_hours(a.condensation_minutes / 60)} after warm air got in, '
                 'which speeds up mold.',
-                a.item.id,
-            ))
-        elif lost.get('dry air', 0) >= 0.25 * total_lost:
-            recs.append(Recommendation(
-                'warning', f'Bag the {name} or move them to the crisper',
-                f'Dry air has cost about {_hours(lost["dry air"])} of freshness.',
                 a.item.id,
             ))
 

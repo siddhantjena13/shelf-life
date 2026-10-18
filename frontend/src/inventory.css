@@ -1933,6 +1933,94 @@ dialog.modal::backdrop {
   background: var(--surface);
 }
 
+/* Freshness estimate (item drawer) */
+
+.estimate {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 16px 14px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--accent-wash) 35%, var(--surface));
+}
+
+.estimate-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.estimate-label {
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.estimate-hero {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.estimate-value {
+  font-size: 30px;
+  font-weight: 300;
+  line-height: 1.1;
+}
+
+.estimate-unit {
+  color: var(--text-secondary);
+  font-size: 15px;
+}
+
+.estimate-sub {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.survival {
+  margin: 6px 0 0;
+}
+
+.survival figcaption {
+  margin-bottom: 2px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.drivers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  margin: 4px 0 0;
+  padding: 10px 0 0;
+  border-top: 1px solid var(--grid);
+  list-style: none;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.drivers li {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+}
+
+.drivers svg {
+  flex: none;
+  margin-top: 2px;
+  color: var(--text-muted);
+}
+
+.detail-stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 /* Toasts */
 
 .toasts {

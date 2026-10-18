@@ -16,7 +16,7 @@ from pymongo.errors import PyMongoError
 import vision
 from inventory import router as inventory_router
 from readings import router as readings_router
-from risk import Item, Reading, assess, recommend
+from risk import Check, Item, Reading, assess, per_minute, recommend
 from risk.profiles import PROFILES
 from store import create_store
 
@@ -74,6 +74,13 @@ class ReadingInput(BaseModel):
     timestamp: datetime
 
 
+class CheckInput(BaseModel):
+    at: datetime
+    freshness: str
+    source: str = "manual"
+    confidence: float | None = Field(default=None, ge=0, le=1)
+
+
 class InventoryInput(BaseModel):
     id: str = Field(min_length=1, max_length=100)
     name: str = Field(min_length=1, max_length=100)
@@ -81,6 +88,10 @@ class InventoryInput(BaseModel):
     zone: str
     added_at: datetime
     packaged: bool = False
+    # End of the printed date's day in the user's time zone.
+    expires_at: datetime | None = None
+    date_kind: str | None = None
+    checks: list[CheckInput] = Field(default_factory=list, max_length=200)
 
 
 class RiskAssessmentInput(BaseModel):
@@ -107,8 +118,10 @@ async def health(request: Request):
     }
 
 
+# Plain def: FastAPI runs it in a worker thread, so the model's CPU work
+# (up to about a second for a large inventory) doesn't hold up other requests.
 @app.post("/api/risk/assess")
-async def assess_inventory(payload: RiskAssessmentInput):
+def assess_inventory(payload: RiskAssessmentInput):
     if any(item.profile not in PROFILES for item in payload.inventory):
         raise HTTPException(status_code=422, detail="Inventory contains an unsupported food profile.")
     if any(item.zone not in ALLOWED_ZONES for item in payload.inventory):
@@ -120,6 +133,7 @@ async def assess_inventory(payload: RiskAssessmentInput):
             readings_by_zone[reading.sensor_id].append(
                 Reading(_epoch(reading.timestamp), reading.temp_c, reading.humidity)
             )
+    readings_by_zone = {zone: per_minute(values) for zone, values in readings_by_zone.items()}
 
     now = _epoch(payload.now)
     assessments = []
@@ -131,6 +145,12 @@ async def assess_inventory(payload: RiskAssessmentInput):
             zone=entry.zone,
             added_at=_epoch(entry.added_at),
             packaged=entry.packaged,
+            expires_at=_epoch(entry.expires_at) if entry.expires_at else None,
+            date_kind=entry.date_kind,
+            checks=tuple(
+                Check(_epoch(check.at), check.freshness, check.source, check.confidence)
+                for check in entry.checks
+            ),
         )
         assessments.append(assess(item, readings_by_zone[item.zone], now))
 
@@ -150,6 +170,16 @@ async def assess_inventory(payload: RiskAssessmentInput):
                 "status": assessment.status,
                 "profileLabel": assessment.profile.label,
                 "remainingHours": round(assessment.remaining_hours, 2),
+                "remainingLow": round(assessment.remaining_low, 2),
+                "remainingHigh": round(assessment.remaining_high, 2),
+                "pSpoiled": round(assessment.p_spoiled, 4),
+                "limiting": assessment.limiting,
+                "waterLossPct": round(assessment.water_loss_pct, 2) if assessment.water_loss_pct is not None else None,
+                "waterLimitPct": assessment.water_limit_pct,
+                "baseline": assessment.baseline,
+                "checksUsed": assessment.checks_used,
+                "checksShiftHours": round(assessment.checks_shift_hours, 2),
+                "survival": assessment.survival,
                 "equivalentHours": round(assessment.equivalent_hours, 2),
                 "elapsedHours": round(assessment.elapsed_hours, 2),
                 "dangerZoneHours": round(assessment.danger_zone_hours, 2),

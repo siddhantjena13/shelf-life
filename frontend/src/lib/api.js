@@ -10,7 +10,7 @@ async function request(path, { method = 'GET', json, form } = {}) {
       body: json ? JSON.stringify(json) : form,
     })
   } catch {
-    throw new Error('Could not reach the ShelfSense backend. Is it running?')
+    throw new Error('Could not reach the ShelfLife backend. Is it running?')
   }
   if (response.status === 204) return null
   const payload = await response.json().catch(() => ({}))
