@@ -37,20 +37,26 @@ const RISK_REFRESH_MS = 15_000
 function useRiskAssessment(rawReadings, inventory) {
   const [assessment, setAssessment] = useState(null)
   const [error, setError] = useState('')
-  const lastRequestAt = useRef(0)
+  const readingsRef = useRef(rawReadings)
 
   useEffect(() => {
-    if (!rawReadings.length) return undefined
-    const delay = Math.max(0, RISK_REFRESH_MS - (Date.now() - lastRequestAt.current))
-    const timer = setTimeout(async () => {
-      lastRequestAt.current = Date.now()
+    readingsRef.current = rawReadings
+  }, [rawReadings])
+
+  useEffect(() => {
+    let stopped = false
+    let timer
+    let controller
+    const refresh = async () => {
+      controller = new AbortController()
       try {
         const response = await fetch('/api/risk/assess', {
+          signal: controller.signal,
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             now: new Date().toISOString(),
-            readings: rawReadings,
+            readings: readingsRef.current,
             inventory: inventory.map((item) => ({
               id: item.id,
               name: item.name,
@@ -67,16 +73,27 @@ function useRiskAssessment(rawReadings, inventory) {
           }),
         })
         const payload = await response.json().catch(() => ({}))
+        if (stopped) return
         if (!response.ok) throw new Error(payload.detail || 'Backend risk assessment is unavailable.')
         setAssessment(payload)
         setError('')
       } catch (cause) {
+        if (stopped) return
         setAssessment(null)
         setError(cause.message || 'Backend risk assessment is unavailable.')
+      } finally {
+        // Keep aging food even without new sensor data. Wait for each request
+        // to finish before scheduling another, so assessments cannot overlap.
+        if (!stopped) timer = setTimeout(refresh, RISK_REFRESH_MS)
       }
-    }, delay)
-    return () => clearTimeout(timer)
-  }, [rawReadings, inventory])
+    }
+    refresh()
+    return () => {
+      stopped = true
+      clearTimeout(timer)
+      controller?.abort()
+    }
+  }, [inventory])
 
   return { assessment, error }
 }
