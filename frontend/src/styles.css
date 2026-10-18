@@ -129,6 +129,15 @@ h2 {
   width: 100%;
 }
 
+.temperature-warning { padding: 24px; max-width: 520px; }
+.temperature-warning-heading { display: flex; align-items: center; gap: 12px; color: var(--text-primary); }
+.temperature-warning-heading > svg { color: var(--status-critical); flex: none; }
+.temperature-warning-heading .btn { margin-left: auto; flex: none; }
+.temperature-warning p { color: var(--text-secondary); line-height: 1.6; }
+.temperature-warning ul { padding: 0; list-style: none; }
+.temperature-warning li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+.temperature-warning li span { color: var(--text-secondary); }
+
 .page-header {
   display: flex;
   align-items: center;

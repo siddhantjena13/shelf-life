@@ -31,6 +31,7 @@ import Toasts, { useToasts } from './components/Toasts.jsx'
 import InventoryPage from './pages/InventoryPage.jsx'
 import SensorsPage from './components/SensorsPage.jsx'
 import AlertsPage from './components/AlertsPage.jsx'
+import TemperatureWarning from './components/TemperatureWarning.jsx'
 
 const THEME_KEY = 'shelflife-theme'
 const RISK_REFRESH_MS = 15_000
@@ -389,6 +390,7 @@ export default function App() {
         <RelogFlow item={relogItem} onClose={() => setRelogId(null)} onCheck={inventory.addCheck} notify={notify} />
       )}
       <Toasts toasts={toasts} dismiss={dismiss} />
+      <TemperatureWarning sensors={sensorStates} now={now} />
     </div>
   )
 }
