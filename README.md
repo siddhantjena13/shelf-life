@@ -76,6 +76,19 @@ uvicorn main:app --reload
 - Live sensor readings are saved in `backend/shelflife.db` (or `SHELFLIFE_DB`). Delete that file to clear history. Confirm devices with http://localhost:8000/api/devices.
 - To share one inventory across machines later, set `MONGODB_URI` to a MongoDB server, such as a free Atlas M0 cluster. The badge at the top of the Inventory page shows which database is in use.
 
+### MongoDB Atlas
+
+The Python backend uses PyMongo; no Node.js MongoDB package is needed. Set these in the git-ignored `backend/.env`:
+
+```dotenv
+MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?compressors=zlib&retryWrites=true&w=majority
+MONGODB_DB=shelflife
+```
+
+When configured, inventory, photos, freshness checks, and live sensor readings use Atlas. SQLite remains available when `MONGODB_URI` is unset. Existing SQLite data is not automatically imported.
+
+In Atlas, allow the backend computer's IP in Network Access and give the database user read/write access to `shelflife`. Restart the backend after changing `.env`. Confirm `/api/health` reports `database: "mongodb"` and `databaseReachable: true`. Keep the connection string out of frontend code and Git.
+
 Run the tests with `python -m pytest` from `backend/`. See `backend/risk/HOW_IT_WORKS.md` for how the freshness model works and the research behind it.
 
 **Frontend**

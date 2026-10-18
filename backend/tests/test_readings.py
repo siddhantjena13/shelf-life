@@ -53,6 +53,7 @@ def test_devices_and_risk_accepts_live_rows(tmp_path):
 def test_first_request_on_fresh_server_does_not_hang(tmp_path, monkeypatch):
     # Regression: the very first request opens the database while holding the lock.
     readings._conn = None
+    monkeypatch.delenv("MONGODB_URI", raising=False)
     monkeypatch.setenv("SHELFLIFE_DB", str(tmp_path / "fresh.db"))
     c = TestClient(app)
     assert c.post("/api/readings", json={"device_id": "shelflife_01", "temp_c": 4, "humidity": 70}).status_code == 200

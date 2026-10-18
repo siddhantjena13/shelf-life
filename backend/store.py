@@ -18,7 +18,7 @@ from typing import Protocol
 log = logging.getLogger(__name__)
 
 DEFAULT_SQLITE_PATH = Path(__file__).with_name("data") / "shelfsense.db"
-DEFAULT_MONGO_DB = "shelfsense"
+DEFAULT_MONGO_DB = "shelflife"
 
 
 class Store(Protocol):
@@ -222,7 +222,7 @@ class MongoStore:
     def __init__(self, uri: str, db_name: str | None):
         from pymongo import AsyncMongoClient
 
-        self.client = AsyncMongoClient(uri, tz_aware=True, serverSelectionTimeoutMS=5000, appname="shelfsense")
+        self.client = AsyncMongoClient(uri, tz_aware=True, serverSelectionTimeoutMS=5000, appname="shelflife")
         db = self.client[db_name] if db_name else self.client.get_default_database(DEFAULT_MONGO_DB)
         self.items = db["items"]
         self.photos = db["photos"]

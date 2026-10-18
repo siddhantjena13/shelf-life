@@ -1,4 +1,4 @@
-"""Live sensor readings from the ESP32 devices, stored in SQLite.
+"""Live sensor readings stored in MongoDB when configured, otherwise SQLite.
 
 The ESP32 posts one reading every few seconds:
     POST /api/readings   {"device_id": "shelflife_01", "temp_c": 4.2, "humidity": 76.1}
@@ -37,6 +37,8 @@ router = APIRouter(prefix="/api", tags=["readings"])
 
 _lock = threading.RLock()  # re-entrant: _db() may call configure() while the lock is held
 _conn: sqlite3.Connection | None = None
+_mongo_client = None
+_mongo_db = None
 
 
 def _device_zones() -> dict[str, str]:
@@ -53,10 +55,23 @@ def _device_zones() -> dict[str, str]:
 
 def configure(db_path: str | None = None) -> None:
     """Open (or create) the database. Called on first use; tests call it directly."""
-    global _conn
+    global _conn, _mongo_client, _mongo_db
     with _lock:
         if _conn is not None:
             _conn.close()
+            _conn = None
+        if _mongo_client is not None:
+            _mongo_client.close()
+            _mongo_client = None
+            _mongo_db = None
+        # An explicit SQLite path is used by tests and local tools.
+        if db_path is None and os.getenv("MONGODB_URI"):
+            from pymongo import MongoClient
+            _mongo_client = MongoClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=5000, appname="shelflife")
+            _mongo_db = _mongo_client.get_default_database(os.getenv("MONGODB_DB") or "shelflife")
+            _mongo_db.readings.create_index("id", unique=True)
+            _mongo_db.readings.create_index("ts_ms")
+            return
         path = db_path or os.getenv("SHELFLIFE_DB", DEFAULT_DB_PATH)
         _conn = sqlite3.connect(path, check_same_thread=False)
         _conn.execute(
@@ -78,6 +93,16 @@ def _db() -> sqlite3.Connection:
     if _conn is None:
         configure()
     return _conn
+
+
+def _mongo():
+    if _conn is None and _mongo_db is None:
+        configure()
+    return _mongo_db
+
+
+def _mongo_row(doc: dict) -> dict:
+    return _row(tuple(doc[key] for key in ("id", "device_id", "sensor_id", "temp_c", "humidity", "door_open", "ts_ms")))
 
 
 def _iso(ts_ms: int) -> str:
@@ -119,6 +144,20 @@ def add_reading(reading: ReadingIn):
         )
     ts_ms = int(time.time() * 1000)  # the backend stamps the time, so the ESP32 needs no clock
     with _lock:
+        mongo = _mongo()
+        if mongo is not None:
+            from pymongo import ReturnDocument
+            counter = mongo.counters.find_one_and_update(
+                {"_id": "reading_id"}, {"$inc": {"value": 1}}, upsert=True,
+                return_document=ReturnDocument.AFTER,
+            )
+            rid = counter["value"]
+            mongo.readings.insert_one({
+                "id": rid, "device_id": reading.device_id, "sensor_id": zone,
+                "temp_c": round(reading.temp_c, 2), "humidity": round(reading.humidity, 2),
+                "door_open": reading.door_open, "ts_ms": ts_ms,
+            })
+            return {"ok": True, "id": rid, "sensor_id": zone, "timestamp": _iso(ts_ms)}
         cur = _db().execute(
             "INSERT INTO readings (device_id, sensor_id, temp_c, humidity, door_open, ts_ms) VALUES (?, ?, ?, ?, ?, ?)",
             (reading.device_id, zone, round(reading.temp_c, 2), round(reading.humidity, 2), int(reading.door_open), ts_ms),
@@ -133,6 +172,15 @@ def list_readings(
     hours: float = Query(default=24, gt=0, le=24 * 7, description="History window when after_id is not given"),
 ):
     with _lock:
+        mongo = _mongo()
+        if mongo is not None:
+            if after_id is not None:
+                docs = list(mongo.readings.find({"id": {"$gt": after_id}}).sort("id", 1).limit(MAX_ROWS_PER_REQUEST))
+            else:
+                since = int((time.time() - hours * 3600) * 1000)
+                docs = list(mongo.readings.find({"ts_ms": {"$gte": since}}).sort("id", -1).limit(MAX_ROWS_PER_REQUEST))
+                docs.reverse()
+            return [_mongo_row(doc) for doc in docs]
         if after_id is not None:
             rows = _db().execute(
                 "SELECT id, device_id, sensor_id, temp_c, humidity, door_open, ts_ms FROM readings "
@@ -153,6 +201,16 @@ def list_readings(
 @router.get("/devices")
 def list_devices():
     with _lock:
+        mongo = _mongo()
+        if mongo is not None:
+            groups = mongo.readings.aggregate([
+                {"$group": {"_id": {"device": "$device_id", "sensor": "$sensor_id"}, "count": {"$sum": 1}, "last": {"$max": "$ts_ms"}}},
+                {"$sort": {"_id.device": 1, "_id.sensor": 1}},
+            ])
+            now_ms = int(time.time() * 1000)
+            return [{"device_id": g["_id"]["device"], "sensor_id": g["_id"]["sensor"],
+                     "readings": g["count"], "last_seen": _iso(g["last"]),
+                     "seconds_ago": round((now_ms - g["last"]) / 1000, 1)} for g in groups]
         rows = _db().execute(
             "SELECT device_id, sensor_id, COUNT(*), MAX(ts_ms) FROM readings GROUP BY device_id, sensor_id ORDER BY device_id"
         ).fetchall()
