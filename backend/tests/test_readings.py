@@ -1,7 +1,33 @@
 from fastapi.testclient import TestClient
+import time
 
 import readings
 from main import app
+
+
+def test_full_day_history_pages_keep_a_fixed_snapshot(tmp_path):
+    c = client(tmp_path)
+    now = int(time.time() * 1000)
+    start = now - 24 * 3600_000 + 1000
+    with readings._lock:
+        db = readings._db()
+        db.executemany(
+            "INSERT INTO readings (device_id, sensor_id, temp_c, humidity, ts_ms) VALUES (?, ?, ?, ?, ?)",
+            [(f"device-{i % 2}", ('top', 'bottom')[i % 2], 4, 70, start + (i // 2) * 3000) for i in range(57600)],
+        )
+        db.commit()
+    page = c.get('/api/readings/history').json()
+    ids = [row['id'] for row in page['readings']]
+    assert page['hasMore']
+    # New readings must not move the snapshot or get lost before live polling.
+    new = c.post('/api/readings', json={'device_id': 'shelflife_01', 'temp_c': 4, 'humidity': 70}).json()
+    while page['hasMore']:
+        page = c.get('/api/readings/history', params={
+            'after_id': page['nextAfterId'], 'until_id': page['untilId'], 'since_ms': page['sinceMs'],
+        }).json()
+        ids.extend(row['id'] for row in page['readings'])
+    assert ids == list(range(1, 57601))
+    assert [r['id'] for r in c.get('/api/readings', params={'after_id': page['untilId']}).json()] == [new['id']]
 
 
 def client(tmp_path):

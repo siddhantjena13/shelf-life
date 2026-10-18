@@ -21,8 +21,18 @@ export function createLiveSource() {
 
     async loadHistory() {
       try {
-        const rows = await getJson('/api/readings?hours=24')
-        if (rows.length) lastId = rows[rows.length - 1].id
+        const rows = []
+        let path = '/api/readings/history?hours=24'
+        let snapshotId = 0
+        while (path) {
+          const page = await getJson(path)
+          rows.push(...page.readings)
+          snapshotId = page.untilId
+          path = page.hasMore
+            ? `/api/readings/history?after_id=${page.nextAfterId}&until_id=${page.untilId}&since_ms=${page.sinceMs}`
+            : null
+        }
+        lastId = snapshotId
         return rows
       } catch (error) {
         console.warn('[live] could not load history; is the backend running?', error)

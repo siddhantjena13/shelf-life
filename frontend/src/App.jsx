@@ -18,6 +18,7 @@ import { mergeRisk, recommend } from './lib/risk.js'
 import { SAMPLE_ITEMS, endOfLocalDay, inventoryRecommendations, samplePayload } from './lib/food.js'
 import Sidebar, { MobileNav } from './components/Sidebar.jsx'
 import { readSavedValue } from './lib/storage.js'
+import { summarizeReadings } from './lib/readingSummary.js'
 import StorageConditions from './components/StorageConditions.jsx'
 import InventoryRisk from './components/InventoryRisk.jsx'
 import ExposureHistory from './components/ExposureHistory.jsx'
@@ -56,7 +57,7 @@ function useRiskAssessment(rawReadings, inventory) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             now: new Date().toISOString(),
-            readings: readingsRef.current,
+            readings: summarizeReadings(readingsRef.current),
             inventory: inventory.map((item) => ({
               id: item.id,
               name: item.name,

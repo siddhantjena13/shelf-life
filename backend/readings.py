@@ -168,6 +168,42 @@ def add_reading(reading: ReadingIn):
     return {"ok": True, "id": cur.lastrowid, "sensor_id": zone, "timestamp": _iso(ts_ms)}
 
 
+@router.get("/readings/history")
+def history_page(
+    hours: float = Query(default=24, gt=0, le=24 * 7),
+    after_id: int = Query(default=0, ge=0),
+    until_id: int | None = Query(default=None, ge=0),
+    since_ms: int | None = Query(default=None, ge=0),
+    limit: int = Query(default=5000, ge=1, le=MAX_ROWS_PER_REQUEST),
+):
+    """Page through a fixed history snapshot while new readings arrive."""
+    since = since_ms if since_ms is not None else int((time.time() - hours * 3600) * 1000)
+    with _lock:
+        mongo = _mongo()
+        if mongo is not None:
+            if until_id is None:
+                latest = mongo.readings.find_one(sort=[("id", -1)])
+                until_id = latest["id"] if latest else 0
+            docs = list(mongo.readings.find({
+                "id": {"$gt": after_id, "$lte": until_id}, "ts_ms": {"$gte": since},
+            }).sort("id", 1).limit(limit + 1))
+            rows = [_mongo_row(doc) for doc in docs]
+        else:
+            db = _db()
+            if until_id is None:
+                until_id = db.execute("SELECT COALESCE(MAX(id), 0) FROM readings").fetchone()[0]
+            rows = [_row(row) for row in db.execute(
+                "SELECT id, device_id, sensor_id, temp_c, humidity, door_open, ts_ms "
+                "FROM readings WHERE id > ? AND id <= ? AND ts_ms >= ? ORDER BY id LIMIT ?",
+                (after_id, until_id, since, limit + 1),
+            ).fetchall()]
+    has_more = len(rows) > limit
+    rows = rows[:limit]
+    return {"readings": rows, "hasMore": has_more,
+            "nextAfterId": rows[-1]["id"] if rows else after_id,
+            "untilId": until_id, "sinceMs": since}
+
+
 @router.get("/readings")
 def list_readings(
     after_id: int | None = Query(default=None, ge=0, description="Only readings with a larger id"),
