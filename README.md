@@ -74,18 +74,19 @@ uvicorn main:app --reload
 - `PERCEPTRON_API_KEY` turns on photo recognition. Get a key at [platform.perceptron.inc](https://platform.perceptron.inc). Without it, photos are still saved and you fill in the details yourself. `PERCEPTRON_MODEL` defaults to `perceptron-mk1.5`. `PERCEPTRON_REASONING` defaults to `none`, which answers in about a second. Higher tiers (`low`, `medium`, `high`) are slower and in testing did not read food or dates any better.
 - Inventory is saved in `backend/data/shelfsense.db`, created on first run. Delete the file to start over. `SQLITE_PATH` moves it.
 - Live sensor readings are saved in `backend/shelflife.db` (or `SHELFLIFE_DB`). Delete that file to clear history. Confirm devices with http://localhost:8000/api/devices.
-- To share one inventory across machines later, set `MONGODB_URI` to a MongoDB server, such as a free Atlas M0 cluster. The badge at the top of the Inventory page shows which database is in use.
+- SQLite is the default for the demo, even if a MongoDB URI is saved. To use Atlas later, set `DATABASE_BACKEND=mongodb` and `MONGODB_URI`. The Inventory page shows which database is in use.
 
 ### MongoDB Atlas
 
 The Python backend uses PyMongo; no Node.js MongoDB package is needed. Set these in the git-ignored `backend/.env`:
 
 ```dotenv
+DATABASE_BACKEND=mongodb
 MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?compressors=zlib&retryWrites=true&w=majority
 MONGODB_DB=shelflife
 ```
 
-When configured, inventory, photos, freshness checks, and live sensor readings use Atlas. SQLite remains available when `MONGODB_URI` is unset. Existing SQLite data is not automatically imported.
+When explicitly enabled, inventory, photos, freshness checks, and live sensor readings use Atlas. Set `DATABASE_BACKEND=sqlite` (or omit it) and restart the backend to return to local storage. Existing data is not automatically copied between databases.
 
 In Atlas, allow the backend computer's IP in Network Access and give the database user read/write access to `shelflife`. Restart the backend after changing `.env`. Confirm `/api/health` reports `database: "mongodb"` and `databaseReachable: true`. Keep the connection string out of frontend code and Git.
 

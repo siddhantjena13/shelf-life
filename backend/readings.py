@@ -1,4 +1,4 @@
-"""Live sensor readings stored in MongoDB when configured, otherwise SQLite.
+"""Live sensor readings stored in SQLite by default, with explicit MongoDB opt-in.
 
 The ESP32 posts one reading every few seconds:
     POST /api/readings   {"device_id": "shelflife_01", "temp_c": 4.2, "humidity": 76.1}
@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, Field
+from database_config import mongo_uri
 
 ZONES = {"top", "mid", "bottom"}
 
@@ -65,9 +66,10 @@ def configure(db_path: str | None = None) -> None:
             _mongo_client = None
             _mongo_db = None
         # An explicit SQLite path is used by tests and local tools.
-        if db_path is None and os.getenv("MONGODB_URI"):
+        uri = mongo_uri() if db_path is None else None
+        if uri:
             from pymongo import MongoClient
-            _mongo_client = MongoClient(os.environ["MONGODB_URI"], serverSelectionTimeoutMS=5000, appname="shelflife")
+            _mongo_client = MongoClient(uri, serverSelectionTimeoutMS=5000, appname="shelflife")
             _mongo_db = _mongo_client.get_default_database(os.getenv("MONGODB_DB") or "shelflife")
             _mongo_db.readings.create_index("id", unique=True)
             _mongo_db.readings.create_index("ts_ms")

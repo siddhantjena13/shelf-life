@@ -2,7 +2,7 @@
 
 By default the inventory lives in a local SQLite file (backend/data/
 shelfsense.db): free, nothing to install, and it survives restarts. Setting
-MONGODB_URI switches to MongoDB instead, for example a free Atlas cluster.
+DATABASE_BACKEND=mongodb and MONGODB_URI enables MongoDB instead.
 
 Both stores exchange the same item dicts: `_id`, timezone-aware datetimes,
 and the item's freshness checks embedded as a `checks` list.
@@ -14,6 +14,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Protocol
+from database_config import mongo_uri
 
 log = logging.getLogger(__name__)
 
@@ -279,7 +280,7 @@ class MongoStore:
 
 
 def create_store() -> Store:
-    uri = os.getenv("MONGODB_URI")
+    uri = mongo_uri()
     if uri:
         return MongoStore(uri, os.getenv("MONGODB_DB"))
     return SqliteStore(os.getenv("SQLITE_PATH") or DEFAULT_SQLITE_PATH)
