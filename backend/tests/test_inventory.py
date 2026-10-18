@@ -210,3 +210,34 @@ def test_implausible_printed_dates_are_dropped():
     raw = {"freshness": "good", "expires_on": "1999-01-01", "date_kind": "use_by"}
     assert vision.normalize_inspected(raw, TODAY)["expiresOn"] is None
     assert vision.normalize_inspected({**raw, "expires_on": "2026-10-20"}, TODAY)["dateKind"] == "use_by"
+
+
+def test_risk_assessment_uses_dates_and_checks(client):
+    now = datetime.now(timezone.utc)
+    readings = [
+        {"sensor_id": "mid", "temp_c": 4.0, "humidity": 70, "timestamp": (now - timedelta(minutes=m)).isoformat()}
+        for m in range(0, 12 * 60, 5)
+    ]
+    base = {"name": "Spinach", "profile": "greens", "zone": "mid", "packaged": True,
+            "added_at": (now - timedelta(hours=12)).isoformat()}
+    payload = {
+        "now": now.isoformat(),
+        "readings": readings,
+        "inventory": [
+            {**base, "id": "plain"},
+            {**base, "id": "checked", "checks": [
+                {"at": (now - timedelta(minutes=5)).isoformat(), "freshness": "poor", "source": "photo", "confidence": 0.9},
+            ]},
+            {**base, "id": "dated", "expires_at": (now + timedelta(days=6)).isoformat(), "date_kind": "best_by"},
+        ],
+    }
+    response = client.post("/api/risk/assess", json=payload)
+    assert response.status_code == 200, response.text
+    items = {i["id"]: i for i in response.json()["items"]}
+    plain, checked, dated = items["plain"], items["checked"], items["dated"]
+    assert plain["remainingLow"] <= plain["remainingHours"] <= plain["remainingHigh"]
+    assert plain["baseline"]["source"] == "foodkeeper" and dated["baseline"]["source"] == "date"
+    assert checked["checksUsed"] == 1 and checked["remainingHours"] < plain["remainingHours"]
+    assert dated["remainingHours"] > plain["remainingHours"]
+    assert plain["survival"][0][0] == 0 and 0 <= plain["survival"][-1][1] <= plain["survival"][0][1]
+    assert plain["waterLimitPct"] == 4.0

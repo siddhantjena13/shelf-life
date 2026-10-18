@@ -15,7 +15,7 @@ ShelfLife tracks **historical environmental exposure** and evaluates it against 
 ## Core Features
 
 - **Hardware Monitoring:** Tracks temperature, humidity, and door-opening frequency.
-- **Risk Engine:** Evaluates accumulated environmental exposure against food-specific guidelines to generate storage-quality scores.
+- **Freshness Model:** Estimates each item's remaining shelf life as a range, combining the printed date, USDA storage times, temperature and humidity history, and photo or manual freshness checks.
 - **Actionable Dashboard:** Displays live data, historical charts, inventory, and tailored recommendations (e.g., *"Relocate produce"*, *"Check door seal"*).
 - **Photo Inventory:** Snap a photo to log food. Perceptron Mk1.5 suggests what it is, how fresh it looks, and any printed use-by date. Every field stays editable. Re-log an item later with a new photo to track how its freshness changes.
 
@@ -34,7 +34,7 @@ ShelfLife tracks **historical environmental exposure** and evaluates it against 
 
 1. Sensors sample the storage environment and log door events.
 2. The backend stores readings and accumulates exposure history per storage unit.
-3. The risk engine compares that exposure against each item's food profile to produce a storage-quality score.
+3. The freshness model combines that exposure with each item's food profile, printed date and freshness checks to estimate how long it has left.
 4. The dashboard surfaces live conditions, trends, and recommendations.
 
 ## Tech Stack
@@ -73,7 +73,7 @@ uvicorn main:app --reload
 - The inventory is saved in a local SQLite file, `backend/data/shelfsense.db`, created on first run. There is nothing to install or pay for. Delete the file to start over. `SQLITE_PATH` moves it.
 - To share one inventory across machines later, set `MONGODB_URI` to a MongoDB server, such as a free Atlas M0 cluster. The badge at the top of the Inventory page shows which database is in use.
 
-Run the tests with `python -m pytest`. See `backend/risk/HOW_IT_WORKS.md` for how the risk model scores each item.
+Run the tests with `python -m pytest`. See `backend/risk/HOW_IT_WORKS.md` for how the freshness model works and the research behind it.
 
 **Frontend**
 ```bash

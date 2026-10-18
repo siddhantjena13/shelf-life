@@ -21,8 +21,8 @@ def series(segments, step=MIN, start=T0):
     return readings
 
 
-def item(profile, packaged=False, zone='mid'):
-    return Item(id=profile, name=PROFILES[profile].label, profile=profile, zone=zone, added_at=T0, packaged=packaged)
+def item(profile, packaged=False, zone='mid', **extra):
+    return Item(id=profile, name=PROFILES[profile].label, profile=profile, zone=zone, added_at=T0, packaged=packaged, **extra)
 
 
 def test_temperature_factor_is_one_at_reference():
@@ -38,6 +38,12 @@ def test_temperature_factor_matches_ratkowsky():
     assert temperature_factor(-10, PROFILES['poultry']) == 0
 
 
+def test_produce_slows_gently_in_the_cold():
+    # Arrhenius, Ea 70 kJ/mol: 0°C keeps greens about 1.6x longer than 40°F,
+    # where a pathogen growth limit would claim about 15x.
+    assert 1 / temperature_factor(0, PROFILES['greens']) == pytest.approx(1.6, abs=0.15)
+
+
 def test_dew_point_known_value():
     # 20°C at 50% RH has a dew point of about 9.3°C.
     assert dew_point_c(20, 50) == pytest.approx(9.3, abs=0.1)
@@ -47,17 +53,19 @@ def test_steady_40f_ages_at_one_hour_per_hour():
     readings = series([(12, REFERENCE_TEMP_C, 70)])
     a = assess(item('poultry'), readings, now=readings[-1].t)
     assert a.equivalent_hours == pytest.approx(a.elapsed_hours, rel=0.01)
-    # Poultry baseline is 1.5 days (FoodKeeper 1-2): 12 h used leaves 24 h.
-    assert a.remaining_hours == pytest.approx(24, abs=0.5)
+    # FoodKeeper 1-2 days, median about 34 h: roughly 22 h left after 12 h.
+    assert 15 < a.remaining_hours < 23
+    assert a.remaining_low < a.remaining_hours < a.remaining_high
     assert a.status == 'good'
 
 
-def test_colder_storage_lasts_longer_but_not_past_usda_max():
-    readings = series([(30, f_to_c(34), 70)])
-    a = assess(item('poultry'), readings, now=readings[-1].t)
-    assert a.equivalent_hours < 0.75 * a.elapsed_hours
-    # Capped by the 2-day upper bound: 48 h minus 30 h elapsed.
-    assert a.remaining_hours == pytest.approx(18, abs=0.5)
+def test_colder_storage_lasts_longer():
+    cold = series([(12, f_to_c(34), 70)])
+    ref = series([(12, REFERENCE_TEMP_C, 70)])
+    cold_a = assess(item('poultry'), cold, now=cold[-1].t)
+    ref_a = assess(item('poultry'), ref, now=ref[-1].t)
+    assert cold_a.equivalent_hours < 0.75 * cold_a.elapsed_hours
+    assert cold_a.remaining_hours > ref_a.remaining_hours
 
 
 def test_brief_lid_opening_does_not_trigger_two_hour_rule():
@@ -85,18 +93,22 @@ def test_dry_air_wilts_open_greens_but_not_bagged_ones():
     readings = series([(24, REFERENCE_TEMP_C, 55)])
     open_greens = assess(item('greens'), readings, now=readings[-1].t)
     bagged = assess(item('greens', packaged=True), readings, now=readings[-1].t)
-    assert bagged.equivalent_hours == pytest.approx(24, rel=0.01)
-    # 40 points below the 95% band at 0.25 per 10 points: twice as fast.
-    assert open_greens.equivalent_hours == pytest.approx(48, rel=0.02)
-    assert open_greens.loss_by_cause['dry air'] == pytest.approx(24, rel=0.02)
+    # The same temperature history ages both alike; only water loss differs.
+    assert open_greens.equivalent_hours == pytest.approx(bagged.equivalent_hours)
+    assert open_greens.water_loss_pct > 5 * bagged.water_loss_pct
+    assert open_greens.water_loss_pct > open_greens.water_limit_pct
+    assert open_greens.limiting == 'water'
+    assert open_greens.status in ('at_risk', 'expired')
+    assert bagged.status == 'good'
 
 
 def test_humidity_is_ignored_for_poultry():
     dry = series([(12, REFERENCE_TEMP_C, 30)])
     humid = series([(12, REFERENCE_TEMP_C, 95)])
-    assert assess(item('poultry'), dry, now=dry[-1].t).equivalent_hours == pytest.approx(
-        assess(item('poultry'), humid, now=humid[-1].t).equivalent_hours
-    )
+    dry_a = assess(item('poultry'), dry, now=dry[-1].t)
+    humid_a = assess(item('poultry'), humid, now=humid[-1].t)
+    assert dry_a.equivalent_hours == pytest.approx(humid_a.equivalent_hours)
+    assert dry_a.water_loss_pct is None
 
 
 def test_warm_humid_air_condenses_on_cold_berries():
@@ -134,7 +146,7 @@ def test_sensor_gap_is_reported():
 
 def test_recommendations():
     warm = series([(1, f_to_c(37), 70), (4, f_to_c(60), 75)])
-    dry = series([(30, REFERENCE_TEMP_C, 55)])
+    dry = series([(12, REFERENCE_TEMP_C, 55)])
     assessments = [
         assess(item('poultry', zone='top'), warm, now=warm[-1].t),
         assess(item('greens', zone='mid'), dry, now=dry[-1].t),
@@ -144,3 +156,13 @@ def test_recommendations():
     assert 'Discard the raw poultry' in titles
     assert 'Bag the leafy greens or move them to the crisper' in titles
     assert 'Check the door seal' in titles
+
+
+def test_fridge_cycling_just_above_40f_is_not_a_discard():
+    # Food hovering at 40.5°F for hours is within sensor accuracy of 40°F;
+    # it ages a little faster but is not the 2-hour rule's case.
+    readings = series([(6, f_to_c(40.5), 70)])
+    a = assess(item('dairy'), readings, now=readings[-1].t)
+    assert a.danger_zone_hours == 0
+    assert a.status != 'discard'
+    assert a.equivalent_hours > a.elapsed_hours
