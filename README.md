@@ -1,84 +1,142 @@
 # ShelfLife
 
-> Built at **DubHacks 2026**
+**Know what your food has been through—not just the temperature right now.**
 
-A portable hardware and software system that monitors food storage environments, assesses cumulative risk, and provides actionable recommendations to reduce food waste.
+Built at **DubHacks 2026**, ShelfLife pairs ESP32 sensors with a food inventory and a Bayesian freshness model to help reduce food waste. It combines storage conditions, printed dates, and freshness checks to estimate what to use first.
 
----
+[Run the demo](#run-the-demo) · [Connect hardware](HARDWARE.md) · [Explore the model](backend/risk/HOW_IT_WORKS.md) · [Meet the team](#team)
 
-## The Concept
+## Why ShelfLife?
 
-Standard monitoring only shows the **current** temperature. A fridge that reads 38°F right now tells you nothing about the two hours it spent at 50°F overnight with the door ajar.
+A fridge reading 38°F right now tells you nothing about the two hours it spent at 50°F overnight. ShelfLife keeps that history and evaluates it for each food item, so a brief door opening and a long warm spell lead to different recommendations.
 
-ShelfLife tracks **historical environmental exposure** and evaluates it against **food-specific profiles** (e.g., raw poultry vs. leafy greens) to better estimate food quality and safety risk over time.
+## What it does
 
-## Core Features
+- **Monitors real storage conditions.** ESP32 nodes with SHT31 sensors report temperature and humidity across fridge zones.
+- **Estimates freshness over time.** A Bayesian model combines food-specific storage profiles, printed dates, sensor exposure, and photo or manual observations. Results include estimated time remaining, a likely range, and the estimated chance an item is past its best.
+- **Logs food from photos.** Perceptron Mk1.5 suggests food names, categories, packaging, visible freshness, and printed dates. Review and edit suggestions before saving.
+- **Tracks changes.** Re-log an item with a new photo to compare its appearance and see its freshness history.
+- **Makes the next action clear.** Dashboard, Inventory, Sensors, and Alerts pages surface what needs attention. Mark food as used or tossed to track outcomes.
+- **Runs locally for the demo.** SQLite is the default. Simulated sensors support demos without hardware; MongoDB Atlas remains available through an explicit configuration switch.
 
-- **Hardware Monitoring:** ESP32 nodes with SHT31 sensors post temperature and humidity every few seconds. The dashboard polls for new readings.
-- **Freshness Model:** Estimates each item's remaining shelf life as a range, combining the printed date, USDA storage times, temperature and humidity history, and photo or manual freshness checks.
-- **Actionable Dashboard:** Live conditions, exposure charts, inventory, sensor status, and recommendations (e.g., *"Relocate produce"*, *"Check door seal"*).
-- **Photo Inventory:** Snap a photo to log food. Perceptron Mk1.5 suggests what it is, how fresh it looks, and any printed use-by date. Every field stays editable. Re-log an item later with a new photo to track how its freshness changes.
+## How it works
 
-## How It Works
-
+```mermaid
+flowchart LR
+    Sensors[ESP32 + SHT31 sensors] -->|Temperature and humidity| API[FastAPI backend]
+    Dashboard[React dashboard] <-->|Readings and inventory| API
+    API <--> Database[(SQLite by default / MongoDB optional)]
+    API --> Model[Bayesian freshness model]
+    Model --> API
+    API <-->|Photo observations| Vision[Perceptron Mk1.5]
 ```
-┌──────────────────────┐      ┌──────────────────────────┐      ┌─────────────────────┐
-│  ESP32 + SHT31       │      │  Backend (FastAPI)       │      │  Dashboard (React)  │
-│  • Temp / humidity   │ ───▶ │  • Ingest readings       │ ───▶ │  • Live readings    │
-│  POST /api/readings  │      │  • Inventory in SQLite   │      │  • History charts   │
-└──────────────────────┘      │  • Risk engine scoring   │      │  • Photo inventory  │
-                              │  • Recommendations       │      │  • Recommendations  │
-                              │  • Perceptron photos     │      └─────────────────────┘
-                              └──────────────────────────┘
-```
 
-1. Sensors sample the storage environment and post to the backend.
-2. The backend stores readings (per fridge zone) and inventory separately.
-3. The freshness model combines that exposure with each item's food profile, printed date and freshness checks to estimate how long it has left.
-4. The dashboard surfaces live conditions, trends, inventory, and recommendations.
+1. Sensors post readings to the backend, which stores them by fridge zone.
+2. Users log food with a photo or manual entry, including its zone, packaging, and printed date when available.
+3. The model combines the item's history and observations into a freshness estimate with uncertainty.
+4. The dashboard shows conditions, trends, estimates, and recommendations. Estimates continue refreshing when sensors stop, using the model's treatment of unobserved time.
 
-## Tech Stack
+The dashboard loads full-day sensor history in batches and summarizes readings into one-minute averages for scoring. Raw readings remain available for live status, charts, and door events when supplied by the data source.
 
-| Layer    | Tools                                              |
-| -------- | -------------------------------------------------- |
-| Hardware | ESP32 Dev Module, Adafruit SHT31 (temp / humidity) |
-| Backend  | Python, FastAPI, SQLite (optional MongoDB)         |
-| Vision   | Perceptron Mk1.5 (food recognition, freshness, printed dates) |
-| Frontend | React, Vite                                        |
+### The freshness model
 
-Food profiles in `backend/risk/profiles.py`: raw poultry, milk, leafy greens, strawberries, whole produce, other refrigerated food. `Whole produce` and `Other refrigerated food` are broad estimates.
+The model uses published temperature-dependent deterioration models and water-loss calculations, then updates its estimates from each item's own freshness checks. It is a probabilistic model rather than a classifier trained on labeled household spoilage outcomes.
+
+Supported profiles: **raw poultry, milk, leafy greens, strawberries, whole produce, and other refrigerated food**. The last two are broad estimated fallbacks; use a specific profile when one fits.
+
+Read [how the model works](backend/risk/HOW_IT_WORKS.md) for assumptions, sources, and limitations.
 
 ## Hackathon MVP
 
-- [x] Working hardware sensors (ESP32 firmware in `firmware/shelflife_sensor/`)
-- [x] Live dashboard visualization (Dashboard, Inventory, Sensors, Alerts)
-- [x] Food-specific risk profiles, including broad estimated fallbacks
-- [x] Bayesian freshness model: estimates remaining shelf life as a range and the chance food is already past its best, using printed dates, temperature and humidity history, and photo or manual freshness checks
-- [x] Historical exposure tracking
+- [x] Working ESP32 temperature and humidity sensors
+- [x] Live dashboard with Dashboard, Inventory, Sensors, and Alerts pages
+- [x] Food-specific profiles and historical exposure tracking
+- [x] Bayesian freshness estimates with remaining-life ranges and uncertainty
+- [x] Photo-assisted inventory logging and freshness re-checks
+- [x] Local persistence with SQLite and optional MongoDB Atlas support
 - [x] Live cooler demonstration
 
-## Getting Started
+## Run the demo
 
-**Backend**
+You need **Python 3.10+**, **Node.js 18+**, and npm. Run the backend and frontend in separate terminals. Hardware and a Perceptron key are optional for manual inventory entry and simulated sensor data.
+
+### 1. Start the backend
+
+From the repository root:
+
+**macOS / Linux**
+
 ```bash
 cd backend
-python -m venv .venv
-source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
-cp .env.example .env               # then add your Perceptron key
-uvicorn main:app --reload
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+cp .env.example .env
+python -m uvicorn main:app --reload
 ```
 
-`backend/.env` (git-ignored) holds the settings:
+**Windows PowerShell**
 
-- `PERCEPTRON_API_KEY` turns on photo recognition. Get a key at [platform.perceptron.inc](https://platform.perceptron.inc). Without it, photos are still saved and you fill in the details yourself. `PERCEPTRON_MODEL` defaults to `perceptron-mk1.5`. `PERCEPTRON_REASONING` defaults to `none`, which answers in about a second. Higher tiers (`low`, `medium`, `high`) are slower and in testing did not read food or dates any better.
-- Inventory is saved in `backend/data/shelfsense.db`, created on first run. Delete the file to start over. `SQLITE_PATH` moves it.
-- Live sensor readings are saved in `backend/shelflife.db` (or `SHELFLIFE_DB`). Delete that file to clear history. Confirm devices with http://localhost:8000/api/devices.
-- SQLite is the default for the demo, even if a MongoDB URI is saved. To use Atlas later, set `DATABASE_BACKEND=mongodb` and `MONGODB_URI`. The Inventory page shows which database is in use.
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+Copy-Item .env.example .env
+.\.venv\Scripts\python.exe -m uvicorn main:app --reload
+```
 
-### MongoDB Atlas
+Copy `.env.example` only on first setup; preserve an existing `.env`. The backend listens on [localhost:8000](http://localhost:8000). Interactive API documentation is at [localhost:8000/docs](http://localhost:8000/docs).
 
-The Python backend uses PyMongo; no Node.js MongoDB package is needed. Set these in the git-ignored `backend/.env`:
+### 2. Start the frontend
+
+In a second terminal, from the repository root:
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+Open **[the simulated demo](http://localhost:5173/?source=sim)**. Without `?source=sim`, the dashboard uses real sensor readings. The sensor-mode banner identifies the active source on every page. Vite forwards `/api` requests to the backend on port 8000.
+
+### 3. Walk through the demo
+
+1. Open Inventory and log food manually or scan a photo if Perceptron is configured.
+2. Review the estimated time left and open an item for the range, drivers, and freshness chart.
+3. On Dashboard, simulate opening the door and watch storage conditions change.
+4. Re-log an item to add a new freshness observation.
+5. Mark an item used or tossed, then review its history.
+
+Simulated readings stay in the browser; inventory is saved by the backend. Items used or tossed remain visible in history for 30 days.
+
+### Real hardware and phones
+
+See [HARDWARE.md](HARDWARE.md) for hotspot setup, wiring, firmware, device-to-zone mapping, and troubleshooting.
+
+For live sensors, start the backend with `--host 0.0.0.0` so ESP32 devices can reach it. The default mapping is `shelflife_01` → top and `shelflife_02` → bottom; override it with `SHELFLIFE_DEVICE_ZONES`.
+
+For a phone camera preview on the same Wi-Fi, run `npm run dev:phone` and open the printed `https://<computer-IP>:5173` address. Accept the local self-signed certificate warning. On plain HTTP, photo capture can use the phone's native camera instead of a live preview.
+
+## Configuration and storage
+
+Settings belong in **`backend/.env`**, which is Git-ignored. Restart the backend after changing them. Keep API keys and database credentials out of frontend code and commits.
+
+| Setting | Purpose | Default |
+| --- | --- | --- |
+| `DATABASE_BACKEND` | `sqlite` for local storage; `mongodb` to opt into Atlas | `sqlite` |
+| `PERCEPTRON_API_KEY` | Enables photo recognition | Unset; manual entry remains available |
+| `PERCEPTRON_MODEL` | Vision model | `perceptron-mk1.5` |
+| `PERCEPTRON_REASONING` | Reasoning effort: `none`, `low`, `medium`, or `high` | `none` |
+| `SQLITE_PATH` | Inventory, photos, and freshness-check database | `backend/data/shelfsense.db` |
+| `SHELFLIFE_DB` | Sensor reading database | `backend/shelflife.db` |
+| `MONGODB_URI` | MongoDB connection string | Unset |
+| `MONGODB_DB` | MongoDB database name | `shelflife` |
+
+The inventory SQLite filename retains an earlier internal name to preserve existing local data. Databases are created automatically. Without a Perceptron key, photos can still be saved and details entered manually. Get a key from [Perceptron](https://platform.perceptron.inc).
+
+### Optional MongoDB Atlas
+
+The backend uses Python's PyMongo driver; no Node.js MongoDB package is needed. Set:
 
 ```dotenv
 DATABASE_BACKEND=mongodb
@@ -86,66 +144,66 @@ MONGODB_URI=mongodb+srv://<username>:<password>@<cluster>.mongodb.net/?compresso
 MONGODB_DB=shelflife
 ```
 
-When explicitly enabled, inventory, photos, freshness checks, and live sensor readings use Atlas. Set `DATABASE_BACKEND=sqlite` (or omit it) and restart the backend to return to local storage. Existing data is not automatically copied between databases.
+Allow the backend computer's public IP in Atlas Network Access and give the database user read/write access to `shelflife`. Inventory, photos, checks, and sensor readings then use Atlas. Verify `/api/health` reports `database: "mongodb"` and `databaseReachable: true`.
 
-In Atlas, allow the backend computer's IP in Network Access and give the database user read/write access to `shelflife`. Restart the backend after changing `.env`. Confirm `/api/health` reports `database: "mongodb"` and `databaseReachable: true`. Keep the connection string out of frontend code and Git.
+To return to the local demo, set `DATABASE_BACKEND=sqlite` and restart. A saved MongoDB URI alone does not enable Atlas. Data is not automatically copied between SQLite and MongoDB.
 
-Run the tests with `python -m pytest` from `backend/`. See `backend/risk/HOW_IT_WORKS.md` for how the freshness model works and the research behind it.
+## Development checks
 
-**Frontend**
+With the backend virtual environment active:
+
 ```bash
-cd frontend
-npm install
-npm run dev
+cd backend
+python -m pip install pytest
+python -m pytest -q
 ```
 
-The dashboard opens at http://localhost:5173. Vite proxies `/api` to the backend on port 8000.
+On Windows, use `.\.venv\Scripts\python.exe` in place of `python` if the environment is not activated.
 
-If you're working on UI without the sensor, add `?source=sim` to the URL (`http://localhost:5173/?source=sim`). Live sensor setup is in [HARDWARE.md](HARDWARE.md).
+From `frontend/`:
 
-To log food from a phone on the same Wi-Fi, run `npm run dev:phone` and open the `https://<your-computer's-IP>:5173` address it prints. Accept the self-signed certificate warning once. Browsers only allow a live camera preview over HTTPS. On plain HTTP, the Take photo button still opens the phone's own camera.
+```bash
+node --test src/lib/readingSummary.test.js
+npm run build
+```
 
-The `Whole produce` and `Other refrigerated food` risk profiles are broad estimates. Select a more specific profile when one fits, and treat these scores as storage decision support rather than proof of food safety.
-
-### Inventory
-
-- **Log food:** take a photo, or upload one, and Perceptron Mk1.5 suggests the food's name, category, whether it is sealed, how fresh it looks (fresh, good, fair, poor, spoiled) and any printed date it can read. Fields it filled in are marked with a sparkle. Several foods in one photo become separate items you can tick on or off.
-- **Re-log:** take a new photo of an item to record how it looks now. Each check is kept, so the item page shows a before/after comparison, a freshness timeline and the photo history.
-- **Used it / Tossed it:** finished items move to a 30-day history that tracks how much food was eaten rather than wasted. Delete is only for entries logged by mistake.
-- Freshness from photos is kept separate from the sensor-based storage score. The camera sees surfaces, not bacteria or temperature history.
+## API overview
 
 | Endpoint | Purpose |
-| -------- | ------- |
-| `GET /api/inventory` | Active items plus items finished in the last 30 days |
-| `POST /api/inventory` | Log an item (optional photo and first freshness check) |
-| `PATCH /api/inventory/{id}` | Edit an item, or set `state` to `used`, `tossed` or `active` |
+| --- | --- |
+| `GET /api/health` | Active database, database reachability, and vision configuration |
+| `GET /api/inventory` | Active items and items finished in the last 30 days |
+| `POST /api/inventory` | Log food with an optional photo and initial observation |
+| `GET /api/inventory/{id}` | Item details and freshness checks |
+| `PATCH /api/inventory/{id}` | Edit food or mark it active, used, or tossed |
 | `DELETE /api/inventory/{id}` | Remove an item and its photos |
-| `POST /api/inventory/{id}/checks` | Re-log: append a freshness check |
-| `POST /api/inventory/scan` | Suggest items from a photo (saves nothing) |
-| `POST /api/inventory/{id}/scan` | Suggest a freshness check for an item from a photo (saves nothing) |
-| `GET /api/photos/{id}` | A stored photo |
-| `POST /api/risk/assess` | Score inventory against sensor history |
-| `GET /api/health` | Which database is active and whether photo recognition is set up |
+| `POST /api/inventory/{id}/checks` | Append a freshness check |
+| `POST /api/inventory/scan` | Suggest food entries from a photo without saving them |
+| `POST /api/inventory/{id}/scan` | Suggest a new observation for an existing item |
+| `GET /api/photos/{id}` | Retrieve a stored photo |
+| `POST /api/risk/assess` | Estimate freshness from inventory and exposure history |
+| `POST /api/readings` | Ingest an ESP32 sensor reading |
+| `GET /api/readings/history` | Paginated history with a fixed snapshot; follow returned cursors |
+| `GET /api/readings?after_id=N` | Poll for readings after a cursor |
+| `GET /api/devices` | Device reporting status |
 
-### Sensors
+## Tech stack
 
-| Endpoint | Purpose |
-| -------- | ------- |
-| `POST /api/readings` | ESP32 posts `{device_id, temp_c, humidity}` |
-| `GET /api/readings?hours=24` | Dashboard history on load |
-| `GET /api/readings?after_id=N` | Dashboard polling |
-| `GET /api/devices` | Which devices have reported |
+| Layer | Technology |
+| --- | --- |
+| Hardware | ESP32 Dev Module, Adafruit SHT31 |
+| Backend | Python, FastAPI, SQLite, optional MongoDB Atlas |
+| Vision | Perceptron Mk1.5 |
+| Frontend | React, Vite, Recharts, Lucide |
 
-Default zone mapping: `shelflife_01` → top, `shelflife_02` → bottom. Override with `SHELFLIFE_DEVICE_ZONES`, for example `shelflife_01=top,shelflife_02=mid`.
+## Limitations
 
-Live sensor setup (hotspot, firmware, wiring, troubleshooting) is in [HARDWARE.md](HARDWARE.md).
-
-## Safety Note
-
-ShelfLife provides **environmental decision support**. Ambient sensors assess storage risk but **cannot directly detect pathogens** or calculate exact remaining shelf life. Always follow official food safety guidance (e.g., USDA/FDA) when deciding whether food is safe to eat.
+ShelfLife estimates storage quality and freshness; it cannot detect pathogens or guarantee that food is safe to eat. Photo observations describe visible appearance, and model parameters include estimates documented alongside their sources. Follow official food-safety guidance and package handling instructions when deciding whether to use food.
 
 ## Team
 
-- Arindam Sanyal
-- Vineeth Rajesh
-- Siddhant Jena
+| Team member | GitHub |
+| --- | --- |
+| Arindam Sanyal | [@sanyalarindam](https://github.com/sanyalarindam) |
+| Vineeth Rajesh | [@VineethRaj201](https://github.com/VineethRaj201) |
+| Siddhant Jena | [@siddhantjena13](https://github.com/siddhantjena13) |
