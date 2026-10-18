@@ -17,7 +17,7 @@ A fridge reading 38°F right now tells you nothing about the two hours it spent 
 - **Logs food from photos.** Perceptron Mk1.5 suggests food names, categories, packaging, visible freshness, and printed dates. Review and edit suggestions before saving.
 - **Tracks changes.** Re-log an item with a new photo to compare its appearance and see its freshness history.
 - **Makes the next action clear.** Dashboard, Inventory, Sensors, and Alerts pages surface what needs attention. Mark food as used or tossed to track outcomes.
-- **Runs locally for the demo.** SQLite is the default. Simulated sensors support demos without hardware; MongoDB Atlas remains available through an explicit configuration switch.
+- **Stores data in MongoDB Atlas.** Inventory, photos, freshness checks, and sensor readings use Atlas through PyMongo when configured. Simulated sensors support demos without hardware.
 
 ## How it works
 
@@ -25,7 +25,7 @@ A fridge reading 38°F right now tells you nothing about the two hours it spent 
 flowchart LR
     Sensors[ESP32 + SHT31 sensors] -->|Temperature and humidity| API[FastAPI backend]
     Dashboard[React dashboard] <-->|Readings and inventory| API
-    API <--> Database[(SQLite by default / MongoDB optional)]
+    API <--> Database[(MongoDB Atlas)]
     API --> Model[Bayesian freshness model]
     Model --> API
     API <-->|Photo observations| Vision[Perceptron Mk1.5]
@@ -53,7 +53,7 @@ Read [how the model works](backend/risk/HOW_IT_WORKS.md) for assumptions, source
 - [x] Food-specific profiles and historical exposure tracking
 - [x] Bayesian freshness estimates with remaining-life ranges and uncertainty
 - [x] Photo-assisted inventory logging and freshness re-checks
-- [x] Local persistence with SQLite and optional MongoDB Atlas support
+- [x] MongoDB Atlas integration for inventory, photos, freshness checks, and sensor history
 - [x] Live cooler demonstration
 
 ## Run the demo
@@ -85,7 +85,7 @@ Copy-Item .env.example .env
 .\.venv\Scripts\python.exe -m uvicorn main:app --reload
 ```
 
-Copy `.env.example` only on first setup; preserve an existing `.env`. The backend listens on [localhost:8000](http://localhost:8000). Interactive API documentation is at [localhost:8000/docs](http://localhost:8000/docs).
+Copy `.env.example` only on first setup; preserve an existing `.env`. To use MongoDB, configure the [Atlas settings below](#mongodb-atlas) before starting the backend. The backend listens on [localhost:8000](http://localhost:8000). Interactive API documentation is at [localhost:8000/docs](http://localhost:8000/docs).
 
 ### 2. Start the frontend
 
@@ -119,22 +119,22 @@ For a phone camera preview on the same Wi-Fi, run `npm run dev:phone` and open t
 
 ## Configuration and storage
 
+**MongoDB Atlas stores inventory, photos, freshness checks, and sensor readings.** Enable it with the settings below.
+
 Settings belong in **`backend/.env`**, which is Git-ignored. Restart the backend after changing them. Keep API keys and database credentials out of frontend code and commits.
 
-| Setting | Purpose | Default |
+| Setting | Purpose | Value / default |
 | --- | --- | --- |
-| `DATABASE_BACKEND` | `sqlite` for local storage; `mongodb` to opt into Atlas | `sqlite` |
+| `DATABASE_BACKEND` | Selects MongoDB storage | Set to `mongodb` |
 | `PERCEPTRON_API_KEY` | Enables photo recognition | Unset; manual entry remains available |
 | `PERCEPTRON_MODEL` | Vision model | `perceptron-mk1.5` |
 | `PERCEPTRON_REASONING` | Reasoning effort: `none`, `low`, `medium`, or `high` | `none` |
-| `SQLITE_PATH` | Inventory, photos, and freshness-check database | `backend/data/shelfsense.db` |
-| `SHELFLIFE_DB` | Sensor reading database | `backend/shelflife.db` |
 | `MONGODB_URI` | MongoDB connection string | Unset |
 | `MONGODB_DB` | MongoDB database name | `shelflife` |
 
-The inventory SQLite filename retains an earlier internal name to preserve existing local data. Databases are created automatically. Without a Perceptron key, photos can still be saved and details entered manually. Get a key from [Perceptron](https://platform.perceptron.inc).
+MongoDB collections are created automatically as the app stores data. Without a Perceptron key, photos can still be saved and details entered manually. Get a key from [Perceptron](https://platform.perceptron.inc).
 
-### Optional MongoDB Atlas
+### MongoDB Atlas
 
 The backend uses Python's PyMongo driver; no Node.js MongoDB package is needed. Set:
 
@@ -146,7 +146,7 @@ MONGODB_DB=shelflife
 
 Allow the backend computer's public IP in Atlas Network Access and give the database user read/write access to `shelflife`. Inventory, photos, checks, and sensor readings then use Atlas. Verify `/api/health` reports `database: "mongodb"` and `databaseReachable: true`.
 
-To return to the local demo, set `DATABASE_BACKEND=sqlite` and restart. A saved MongoDB URI alone does not enable Atlas. Data is not automatically copied between SQLite and MongoDB.
+Set both `DATABASE_BACKEND=mongodb` and `MONGODB_URI`; a saved URI alone does not enable Atlas. Restart the backend after updating these settings.
 
 ## Development checks
 
@@ -192,7 +192,8 @@ npm run build
 | Layer | Technology |
 | --- | --- |
 | Hardware | ESP32 Dev Module, Adafruit SHT31 |
-| Backend | Python, FastAPI, SQLite, optional MongoDB Atlas |
+| Backend | Python, FastAPI, PyMongo |
+| Database | MongoDB Atlas |
 | Vision | Perceptron Mk1.5 |
 | Frontend | React, Vite, Recharts, Lucide |
 
