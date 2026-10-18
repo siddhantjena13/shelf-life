@@ -31,6 +31,9 @@ void connectWiFi() {
 
   Serial.printf("Connecting to Wi-Fi \"%s\"", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  // Keep the radio awake: modem sleep drops the average draw low enough
+  // that USB power banks think charging is done and switch off.
+  WiFi.setSleep(false);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < WIFI_TIMEOUT_MS) {
