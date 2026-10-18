@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Camera, DoorOpen, Moon, Sun } from 'lucide-react'
+import { Camera, DoorOpen, FlaskConical, Moon, Radio, Sun } from 'lucide-react'
 import { ZONES, RANGES, SAFE_LIMIT_F, OFFLINE_AFTER_MS } from './config.js'
 import { useReadings, useNow } from './data/useReadings.js'
 import { useHealth, useInventory } from './data/useInventory.js'
@@ -241,6 +241,15 @@ export default function App() {
     <div className="app">
       <Sidebar page={page} onNavigate={navigate} inventoryCount={active.length} onLog={() => setLogging(true)} />
       <main className="main">
+        <div className={`sensor-mode ${source?.simulated ? 'sensor-mode-simulated' : 'sensor-mode-hardware'}`} role="status">
+          <span className="sensor-mode-icon" aria-hidden="true">{source?.simulated ? <FlaskConical size={21} /> : <Radio size={21} />}</span>
+          <div className="sensor-mode-copy">
+            <span className="sensor-mode-label">Sensor mode</span>
+            <strong>{!source ? 'Connecting…' : source.simulated ? 'Simulated data' : 'Live hardware'}</strong>
+            <span className="sensor-mode-description">{!source ? 'Preparing the sensor feed' : source.simulated ? 'Demo readings · no physical sensors connected to this view' : 'ESP32 sensors · Cooler 1'}</span>
+          </div>
+          {source && <span className="sensor-mode-state">{source.simulated ? 'Demo mode' : online ? 'Receiving readings' : latest ? 'Feed offline' : 'Waiting for sensors'}</span>}
+        </div>
         {page === 'inventory' ? (
           <>
             <header className="page-header">
@@ -298,7 +307,6 @@ export default function App() {
                   ) : (
                     <strong>{latest ? 'Offline' : 'Waiting for readings…'}</strong>
                   )}
-                  {source?.simulated && <span className="tag">Simulated data</span>}
                 </div>
                 <div className="segmented" role="group" aria-label="Time range">
                   {RANGES.map((r) => (
@@ -335,7 +343,6 @@ export default function App() {
                 <div className="live">
                   <span className={`live-dot ${online ? 'on' : ''}`} />
                   <span><strong>{online ? 'Live sensor feed' : latest ? 'Sensor feed offline' : 'Waiting for readings'}</strong></span>
-                  {source?.simulated && <span className="tag">Simulated data</span>}
                 </div>
                 <div className="segmented" role="group" aria-label="Sensor history time range">
                   {RANGES.map((r) => (

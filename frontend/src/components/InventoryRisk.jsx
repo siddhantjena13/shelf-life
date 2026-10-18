@@ -71,7 +71,7 @@ export default function InventoryRisk({ items, inventoryStatus, onLog, onOpenIte
       ) : (
         <div className="table-scroll">
           <table className="table">
-            <thead><tr><th>Item</th><th>Looks</th><th>Zone</th><th className="num">Freshness</th><th>Status</th><th><span className="visually-hidden">Open</span></th></tr></thead>
+            <thead><tr><th>Item</th><th>Looks</th><th>Zone</th><th className="num">Estimated freshness</th><th>Status</th><th><span className="visually-hidden">Open</span></th></tr></thead>
             <tbody>{items.map((item) => (
               <tr key={item.id} className="clickable-row" onClick={() => onOpenItem(item.id)}>
                 <td>
@@ -102,7 +102,7 @@ export default function InventoryRisk({ items, inventoryStatus, onLog, onOpenIte
         </div>
       )}
       <div className="panel-foot">
-        <p className="caption">Expected share of shelf life left, from printed dates, sensor history and freshness checks.</p>
+        <p className="caption">Estimated share of shelf life left, from printed dates, sensor history and freshness checks.</p>
         <button className="text-link" onClick={onOpenInventory}>Open inventory <ChevronRight size={14} /></button>
       </div>
     </section>

@@ -16,7 +16,7 @@ export function FreshnessMeter({ level, size = 'md' }) {
     <span
       className={`fresh-meter fresh-meter-${size}`}
       role="img"
-      aria-label={level ? `Freshness: ${FRESHNESS[level].label}` : 'Freshness not rated'}
+      aria-label={level ? `Observed appearance: ${FRESHNESS[level].label}` : 'Appearance not rated'}
       style={{ '--level': level ? freshnessColor(level) : 'var(--border)' }}
     >
       {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n <= rank ? 'on' : ''} />)}
@@ -72,7 +72,7 @@ export function FreshnessTrend({ checks }) {
   const y = (c) => pad + ((5 - FRESHNESS[c.freshness].rank) / 4) * (h - pad * 2)
   const path = points.map((c, i) => `${i ? 'L' : 'M'}${x(c).toFixed(1)},${y(c).toFixed(1)}`).join(' ')
   return (
-    <svg className="fresh-trend" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Freshness over time">
+    <svg className="fresh-trend" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Observed appearance over time">
       {[1, 2, 3, 4, 5].map((rank) => {
         const yy = pad + ((5 - rank) / 4) * (h - pad * 2)
         return <line key={rank} x1={pad} x2={w - pad} y1={yy} y2={yy} className="fresh-trend-grid" />

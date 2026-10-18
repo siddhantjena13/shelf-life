@@ -21,7 +21,7 @@ function SurvivalTooltip({ active, payload, useDays }) {
   return (
     <div className="tooltip">
       <div className="tooltip-time">{h === 0 ? 'Now' : `In ${useDays ? formatHours(h) : `${Math.round(h)} h`}`}</div>
-      <div className="tooltip-row"><strong>{Math.round(p)}%</strong><span>chance it’s still good</span></div>
+      <div className="tooltip-row"><strong>{Math.round(p)}%</strong><span>estimated chance it’s still fresh</span></div>
     </div>
   )
 }
@@ -34,7 +34,7 @@ export function SurvivalChart({ survival, medianHours }) {
 
   return (
     <figure className="survival">
-      <figcaption>Chance it’s still good</figcaption>
+      <figcaption>Estimated chance it’s still fresh</figcaption>
       <ResponsiveContainer width="100%" height={150}>
         <AreaChart data={data} margin={{ top: 14, right: 12, bottom: 0, left: 0 }}>
           <CartesianGrid vertical={false} stroke="var(--grid)" />
@@ -76,8 +76,8 @@ export function SurvivalChart({ survival, medianHours }) {
         </AreaChart>
       </ResponsiveContainer>
       <table className="visually-hidden">
-        <caption>Chance the item is still good over time</caption>
-        <thead><tr><th>From now</th><th>Chance still good</th></tr></thead>
+        <caption>Estimated chance the item remains fresh over time</caption>
+        <thead><tr><th>From now</th><th>Estimated chance still fresh</th></tr></thead>
         <tbody>
           {data.filter((_, i) => i % 4 === 0).map((row) => (
             <tr key={row.h}><td>{formatHours(row.h)}</td><td>{Math.round(row.p)}%</td></tr>
@@ -150,7 +150,7 @@ export default function FreshnessEstimate({ item, risk }) {
   if (!risk || risk.scoringMode !== 'backend' || !risk.survival) {
     return (
       <section className="estimate">
-        <small className="estimate-label">Freshness estimate</small>
+        <small className="estimate-label">Estimated freshness</small>
         <p className="muted">Connecting to the freshness model…</p>
       </section>
     )
@@ -163,7 +163,7 @@ export default function FreshnessEstimate({ item, risk }) {
   return (
     <section className="estimate">
       <div className="estimate-head">
-        <small className="estimate-label">Freshness estimate</small>
+        <small className="estimate-label">Estimated freshness</small>
         <StatusBadge level={status.level} label={status.label} />
       </div>
       <div className="estimate-hero">

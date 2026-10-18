@@ -41,7 +41,7 @@ export default function FoodCard({ item, risk, now, onOpen, onRelog, onUsed, sty
   const modelled = risk?.scoringMode === 'backend'
   const left = !risk ? '—'
     : !modelled ? status.label
-      : risk.pSpoiled >= 0.5 ? 'Past its best'
+      : risk.pSpoiled >= 0.5 ? 'Likely past its best'
         : `~${formatHours(risk.remainingHours)}`
 
   return (
@@ -81,7 +81,7 @@ export default function FoodCard({ item, risk, now, onOpen, onRelog, onUsed, sty
             <div className="food-score" title={modelled ? `Likely ${Math.round(risk.remainingLow)}–${Math.round(risk.remainingHigh)} h left` : undefined}>
               <ScoreRing score={risk?.score} level={status?.level} size={36} />
               <span>
-                <small>{modelled && risk.pSpoiled < 0.5 ? 'Left' : 'Freshness'}</small>
+                <small>{modelled && risk.pSpoiled < 0.5 ? 'Estimated time left' : 'Estimated freshness'}</small>
                 <strong>{left}</strong>
               </span>
             </div>

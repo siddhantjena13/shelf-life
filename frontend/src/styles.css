@@ -138,6 +138,35 @@ h2 {
   margin-bottom: 24px;
 }
 
+.sensor-mode {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border: 1px solid color-mix(in srgb, var(--mode-color), var(--border) 55%);
+  border-left: 4px solid var(--mode-color);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--mode-color) 10%, var(--surface));
+}
+
+.sensor-mode-simulated { --mode-color: #a76d00; }
+.sensor-mode-hardware { --mode-color: #326b98; }
+:root[data-theme='dark'] .sensor-mode-simulated { --mode-color: #f7c765; }
+:root[data-theme='dark'] .sensor-mode-hardware { --mode-color: #78b8eb; }
+.sensor-mode-icon { display: grid; place-items: center; flex: none; width: 42px; height: 42px; border-radius: 10px; color: var(--mode-color); background: color-mix(in srgb, var(--mode-color) 12%, var(--surface)); }
+.sensor-mode-copy { display: grid; gap: 2px; min-width: 0; }
+.sensor-mode-label { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: var(--mode-color); }
+.sensor-mode-copy strong { font-size: 17px; color: var(--text-primary); }
+.sensor-mode-description { font-size: 12px; color: var(--text-secondary); }
+.sensor-mode-state { display: inline-flex; align-items: center; gap: 7px; margin-left: auto; flex: none; color: var(--mode-color); font-size: 11px; font-weight: 800; cursor: default; }
+.sensor-mode-state::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+@media (max-width: 560px) {
+  .sensor-mode { flex-wrap: wrap; gap: 10px; padding: 12px; }
+  .sensor-mode-copy { flex: 1; }
+  .sensor-mode-state { margin-left: 52px; }
+}
+
 .page-actions {
   display: flex;
   gap: 10px;
