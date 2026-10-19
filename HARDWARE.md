@@ -61,6 +61,19 @@ npm run dev
 
 Wiring: 3V3 → VIN, GND → GND, GPIO21 → SDA, GPIO22 → SCL.
 
+## Enclosure
+
+3D-printable parts are in [`enclosure/`](enclosure/):
+
+| File | Part |
+|---|---|
+| `shelflife_base.stl` | Base tray that holds the power bank |
+| `shelflife_shelf_v5.stl` | Shelf that holds the ESP32 above the power bank |
+| `shelflife_lid_01.stl` | Lid with the vented sensor pod |
+
+The SHT31 sits in the lid's separate vented pod, away from the ESP32, because
+the board warms slightly while Wi-Fi is on.
+
 ## Devices and zones
 
 | Device | Dashboard zone |
